@@ -9,17 +9,6 @@ from typing import Dict, List, Optional, Callable
 
 REMEDIATION_PROMPT = """You are a senior Kubernetes security engineer and incident responder. You are inside a live K8s attack platform and must autonomously remediate a security incident. Your thinking must be EXTREMELY DETAILED — walk through every consideration, every risk, every alternative, and justify every command.
 
-## INCIDENT DETAILS
-- Incident Type: {incident_type}
-- Severity: {severity}
-- Description: {description}
-
-### Affected Infrastructure:
-{infrastructure}
-
-### Recent Detection Events:
-{detection_events}
-
 ## YOUR TASK
 Analyze and remediate this incident. You have full `kubectl` access.
 
@@ -84,7 +73,6 @@ After all remediation commands:
 
 <summary>
 ## Remediation Complete
-**Incident**: {incident_type}
 **Actions Taken**: [numbered list of every command executed and why]
 **Current State**: [what is the security posture now?]
 **Verification**: [how do we know this worked? what should be monitored going forward?]
@@ -205,13 +193,19 @@ class RemediationAgent:
             infrastructure_str = json.dumps(incident.get("infrastructure", []), indent=2)
             detection_str = json.dumps(incident.get("detection_events", [])[:5], indent=2)
 
-            prompt = REMEDIATION_PROMPT.format(
-                incident_type=incident.get("type", incident.get("name", "Unknown")),
-                severity=incident.get("severity", "unknown"),
-                description=incident.get("description", ""),
-                infrastructure=infrastructure_str[:2000] if infrastructure_str else "None",
-                detection_events=detection_str[:2000] if detection_str else "None",
-            )
+            user_prompt = f"""## INCIDENT TO REMEDIATE
+
+- **Incident Type**: {incident.get("type", incident.get("name", "Unknown"))}
+- **Severity**: {incident.get("severity", "unknown")}
+- **Description**: {incident.get("description", "")}
+
+### Affected Infrastructure:
+{infrastructure_str[:2000] if infrastructure_str else "None"}
+
+### Recent Detection Events:
+{detection_str[:2000] if detection_str else "None"}
+
+Begin your analysis and remediation immediately."""
 
             await self._broadcast({
                 "type": "remediation_agent_thinking",
@@ -224,12 +218,12 @@ class RemediationAgent:
 
             async with self.client.messages.stream(
                 model="claude-sonnet-4-20250514",
-                max_tokens=4096,
-                messages=[{"role": "user", "content": prompt}],
+                max_tokens=8192,
+                system=REMEDIATION_PROMPT,
+                messages=[{"role": "user", "content": user_prompt}],
             ) as stream:
                 async for text in stream.text_stream:
                     current_text += text
-                    # Check for completed tags
                     await self._process_stream_text(session, current_text, text)
 
             # Wait for all pending command approvals to finish

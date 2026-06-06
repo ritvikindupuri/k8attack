@@ -340,7 +340,7 @@ export function Dashboard({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 6 }}>
               {Object.entries(mitre).map(([key, tactic]: [string, any]) => {
                 const completedHere = attackHistory.filter(
-                  (a: any) => a.mitre_tactic === key && a.status === 'completed'
+                  (a: any) => (a.mitre_tactic || a.result?.mitre_tactic) === key && a.status === 'completed'
                 ).length
                 const tacticId = tactic.id || ''
                 const mitreUrl = tacticId.startsWith('TA')

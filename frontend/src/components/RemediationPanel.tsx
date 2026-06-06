@@ -117,13 +117,13 @@ export function RemediationPanel({ events, fetchApi, send, remediationSessions }
     }
   }, [remediationSessions])
 
-  const processedEventIds = useRef<Set<number>>(new Set())
+  const processedEventIds = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     for (const event of events) {
-      const eventId = event.receivedAt || Date.now()
-      if (processedEventIds.current.has(eventId)) continue
-      processedEventIds.current.add(eventId)
+      const eventKey = `${event.type}:${event.session_id || ''}:${event.step_index ?? ''}:${event.receivedAt || Date.now()}`
+      if (processedEventIds.current.has(eventKey)) continue
+      processedEventIds.current.add(eventKey)
 
       if (event.type === 'remediation_stream' && event.session_id) {
         streamRef.current[event.session_id] = (streamRef.current[event.session_id] || '') + (event.chunk || '')
