@@ -18,7 +18,27 @@ export default function App() {
   const [remediationReady, setRemediationReady] = useState(false)
   const [remediationSessions, setRemediationSessions] = useState<any[]>([])
   const [orchestratorStatus, setOrchestratorStatus] = useState<any>(null)
+  const [mitreAttack, setMitreAttack] = useState<any>(null)
   const eventsRef = useRef<any[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    const fetchMitre = async () => {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          const res = await fetch('/api/attacks/mitre')
+          const d = await res.json()
+          if (d?.mitre_attack && !cancelled) {
+            setMitreAttack(d.mitre_attack)
+            return
+          }
+        } catch {}
+        await new Promise(r => setTimeout(r, 1000))
+      }
+    }
+    fetchMitre()
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     const unsub = on('*', (data) => {
@@ -206,6 +226,7 @@ export default function App() {
             fetchApi={fetchApi}
             remediationReady={remediationReady}
             remediationSessions={remediationSessions}
+            mitreAttack={mitreAttack}
           />
         )}
         {activeTab === 'remediation' && (

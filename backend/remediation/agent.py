@@ -134,38 +134,12 @@ class RemediationAgent:
         self.api_key = api_key
         self.sessions: Dict[str, RemediationSession] = {}
         self._client = None
-        self._pending_approvals: Dict[str, asyncio.Event] = {}
-        self._pending_exec_count: Dict[str, int] = {}
-        self._session_done_events: Dict[str, asyncio.Event] = {}
+        self._session_execute_events: Dict[str, asyncio.Event] = {}
 
-    def signal_approval(self, session_id: str, step_index: int, approved: bool):
-        """Called from WebSocket handler when user approves/rejects a command."""
-        key = f"{session_id}:{step_index}"
-        event = self._pending_approvals.pop(key, None)
+    def signal_execute_all(self, session_id: str):
+        event = self._session_execute_events.pop(session_id, None)
         if event:
-            event.approved = approved
             event.set()
-
-    async def _request_approval(self, session: RemediationSession, step_index: int, command: str) -> bool:
-        """Broadcast approval request and wait for user response with 60s timeout."""
-        await self._broadcast({
-            "type": "remediation_approval_required",
-            "session_id": session.session_id,
-            "step_index": step_index,
-            "command": command,
-        })
-
-        key = f"{session.session_id}:{step_index}"
-        event = asyncio.Event()
-        event.approved = False
-        self._pending_approvals[key] = event
-
-        try:
-            await asyncio.wait_for(event.wait(), timeout=60.0)
-            return event.approved
-        except asyncio.TimeoutError:
-            self._pending_approvals.pop(key, None)
-            return False
 
     @property
     def client(self):
@@ -210,10 +184,9 @@ Begin your analysis and remediation immediately."""
             await self._broadcast({
                 "type": "remediation_agent_thinking",
                 "session_id": session.session_id,
-                "content": "🧠 Initializing Claude remediation agent...\n",
+                "content": "Agent is generating remediation plan...\n",
             })
 
-            current_thinking = ""
             current_text = ""
 
             async with self.client.messages.stream(
@@ -226,14 +199,26 @@ Begin your analysis and remediation immediately."""
                     current_text += text
                     await self._process_stream_text(session, current_text, text)
 
-            # Wait for all pending command approvals to finish
-            sid = session.session_id
-            if self._pending_exec_count.get(sid, 0) > 0:
-                self._session_done_events[sid] = asyncio.Event()
+            # Phase 2: Wait for user to trigger execution
+            has_commands = len([s for s in session.steps if s.command is not None]) > 0
+            if has_commands:
+                await self._broadcast({
+                    "type": "remediation_commands_ready",
+                    "session_id": session.session_id,
+                    "command_count": len([s for s in session.steps if s.command is not None]),
+                })
+
+                event = asyncio.Event()
+                self._session_execute_events[session.session_id] = event
                 try:
-                    await asyncio.wait_for(self._session_done_events[sid].wait(), timeout=300.0)
+                    await asyncio.wait_for(event.wait(), timeout=600.0)
                 except asyncio.TimeoutError:
                     pass
+
+                # Execute all commands sequentially
+                for step_index, step in enumerate(session.steps):
+                    if step.command:
+                        await self._execute_command(session, step, step_index)
 
             await self._finalize_remediation(session, current_text)
 
@@ -262,7 +247,6 @@ Begin your analysis and remediation immediately."""
             for i in range(parsed_commands, len(command_matches)):
                 cmd = command_matches[i].group(1).strip()
                 thinking = ""
-                # Find the thinking that preceded this command
                 for tm in thinking_matches:
                     if tm.end() < command_matches[i].start():
                         thinking = tm.group(1).strip()
@@ -279,47 +263,15 @@ Begin your analysis and remediation immediately."""
                     "command": cmd,
                 })
 
-                sid = session.session_id
-                self._pending_exec_count[sid] = self._pending_exec_count.get(sid, 0) + 1
-                asyncio.create_task(self._execute_command_with_approval(session, step, step_index))
-
         summary_match = re.search(r'<summary>\s*\n?(.*?)\n?\s*</summary>', full_text, re.DOTALL)
         if summary_match and session.summary is None:
             session.summary = summary_match.group(1).strip()
 
-    async def _execute_command_with_approval(self, session: RemediationSession, step: RemediationStep, step_index: int):
-        try:
-            approved = await self._request_approval(session, step_index, step.command)
-            if approved:
-                await self._broadcast({
-                    "type": "remediation_command_approved",
-                    "session_id": session.session_id,
-                    "step_index": step_index,
-                    "command": step.command,
-                })
-                await self._execute_command(session, step)
-            else:
-                step.command_output = "Command rejected by human operator"
-                step.command_success = False
-                await self._broadcast({
-                    "type": "remediation_command_result",
-                    "session_id": session.session_id,
-                    "step_index": step_index,
-                    "command": step.command,
-                    "output": step.command_output,
-                    "success": False,
-                })
-        finally:
-            sid = session.session_id
-            self._pending_exec_count[sid] = self._pending_exec_count.get(sid, 0) - 1
-            if self._pending_exec_count[sid] <= 0 and sid in self._session_done_events:
-                self._session_done_events[sid].set()
-
-    async def _execute_command(self, session: RemediationSession, step: RemediationStep):
+    async def _execute_command(self, session: RemediationSession, step: RemediationStep, step_index: int):
         await self._broadcast({
             "type": "remediation_executing",
             "session_id": session.session_id,
-            "step_index": len(session.steps) - 1,
+            "step_index": step_index,
             "command": step.command,
         })
 
@@ -335,13 +287,13 @@ Begin your analysis and remediation immediately."""
                 step.command_output = output
                 step.command_success = success
             else:
-                step.command_output = "Error: Only kubectl commands are supported"
+                step.command_output = "Only kubectl commands are supported"
                 step.command_success = False
 
             await self._broadcast({
                 "type": "remediation_command_result",
                 "session_id": session.session_id,
-                "step_index": len(session.steps) - 1,
+                "step_index": step_index,
                 "command": step.command,
                 "output": step.command_output,
                 "success": step.command_success,
@@ -353,7 +305,7 @@ Begin your analysis and remediation immediately."""
             await self._broadcast({
                 "type": "remediation_command_result",
                 "session_id": session.session_id,
-                "step_index": len(session.steps) - 1,
+                "step_index": step_index,
                 "command": step.command,
                 "output": step.command_output,
                 "success": False,
@@ -364,14 +316,13 @@ Begin your analysis and remediation immediately."""
             await self._broadcast({
                 "type": "remediation_command_result",
                 "session_id": session.session_id,
-                "step_index": len(session.steps) - 1,
+                "step_index": step_index,
                 "command": step.command,
                 "output": step.command_output,
                 "success": False,
             })
 
     async def _finalize_remediation(self, session: RemediationSession, full_text: str):
-        # Check for final summary
         summary_match = re.search(r'<summary>\s*\n?(.*?)\n?\s*</summary>', full_text, re.DOTALL)
         if summary_match and session.summary is None:
             session.summary = summary_match.group(1).strip()

@@ -439,17 +439,13 @@ async def handle_ws_message(websocket: WebSocket, msg: Dict[str, Any]):
     elif msg_type == "get_cluster_info":
         info = await cluster_manager.get_cluster_info()
         await ws_manager.send_to(websocket, {"type": "cluster_info", "data": info})
-    elif msg_type == "remediation_approval":
+    elif msg_type == "remediation_execute_all":
         session_id = msg.get("session_id")
-        step_index = msg.get("step_index")
-        approved = msg.get("approved", False)
-        if remediation_agent and session_id is not None and step_index is not None:
-            remediation_agent.signal_approval(session_id, step_index, approved)
+        if remediation_agent and session_id:
+            remediation_agent.signal_execute_all(session_id)
             await ws_manager.send_to(websocket, {
-                "type": "remediation_approval_received",
+                "type": "remediation_execute_all_received",
                 "session_id": session_id,
-                "step_index": step_index,
-                "approved": approved,
             })
 
 

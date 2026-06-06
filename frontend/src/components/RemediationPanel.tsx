@@ -29,75 +29,16 @@ interface Props {
 const pulseStyle = `
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes execPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 `
-
-function ApprovalInput({ sessionId, stepIndex, onDecision }: {
-  sessionId: string
-  stepIndex: number
-  onDecision: (approved: boolean) => void
-}) {
-  const [inputValue, setInputValue] = useState('')
-  const [submitted, setSubmitted] = useState(false)
-
-  const handleSubmit = (value: string) => {
-    const trimmed = value.trim().toLowerCase()
-    if (trimmed === 'allow' || trimmed === 'reject') {
-      setSubmitted(true)
-      onDecision(trimmed === 'allow')
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleSubmit(inputValue)
-  }
-
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 6,
-      padding: '10px 12px', borderTop: '1px solid #292524',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 11, color: '#f59e0b', animation: 'pulse 1s infinite' }}>
-          ●
-        </span>
-        <span style={{ fontSize: 12, color: '#fbbf24', fontWeight: 600 }}>
-          HUMAN APPROVAL REQUIRED — Type <span style={{ color: '#22c55e' }}>allow</span> or <span style={{ color: '#ef4444' }}>reject</span> to continue
-        </span>
-      </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={submitted}
-          placeholder='Type "allow" to execute or "reject" to skip...'
-          style={{
-            flex: 1, padding: '6px 10px', borderRadius: 4, border: '1px solid #444',
-            background: submitted ? '#1a1a2e' : '#0f172a', color: '#e0e0e0',
-            fontSize: 13, fontFamily: '"JetBrains Mono", monospace', outline: 'none',
-          }}
-        />
-        <button onClick={() => handleSubmit(inputValue)} disabled={submitted} style={{
-          padding: '6px 16px', borderRadius: 4, border: 'none', cursor: submitted ? 'default' : 'pointer',
-          fontSize: 12, fontWeight: 700, background: '#6366f1', color: '#e0e0e0',
-          opacity: submitted ? 0.5 : 1,
-        }}>
-          Submit
-        </button>
-      </div>
-      <div style={{ fontSize: 10, color: '#64748b' }}>
-        Auto-skips after 60s if no response
-      </div>
-    </div>
-  )
-}
 
 export function RemediationPanel({ events, fetchApi, send, remediationSessions }: Props) {
   const [sessions, setSessions] = useState<RemediationSession[]>([])
   const [activeSession, setActiveSession] = useState<string | null>(null)
   const [streamTexts, setStreamTexts] = useState<Record<string, string>>({})
-  const [pendingApprovals, setPendingApprovals] = useState<Record<string, { step_index: number; command: string }>>({})
+  const [executing, setExecuting] = useState(false)
+  const [commandsReady, setCommandsReady] = useState(false)
+  const [isExecuted, setIsExecuted] = useState(false)
   const streamRef = useRef<Record<string, string>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -111,7 +52,7 @@ export function RemediationPanel({ events, fetchApi, send, remediationSessions }
   useEffect(() => {
     if (remediationSessions.length > 0) {
       setSessions(remediationSessions)
-      if (!activeSession) {
+      if (!activeSession || !remediationSessions.find(s => s.session_id === activeSession)) {
         setActiveSession(remediationSessions[0].session_id)
       }
     }
@@ -130,12 +71,33 @@ export function RemediationPanel({ events, fetchApi, send, remediationSessions }
         setStreamTexts({ ...streamRef.current })
       }
 
-      if (event.type === 'remediation_approval_required' && event.session_id) {
-        const key = `${event.session_id}:${event.step_index}`
-        setPendingApprovals(prev => ({
-          ...prev,
-          [key]: { step_index: event.step_index, command: event.command },
+      if (event.type === 'remediation_commands_ready' && event.session_id) {
+        setCommandsReady(true)
+      }
+
+      if (event.type === 'remediation_executing' && event.session_id) {
+        setExecuting(true)
+      }
+
+      if (event.type === 'remediation_command_result' && event.session_id) {
+        setSessions(prev => prev.map(s => {
+          if (s.session_id !== event.session_id) return s
+          const steps = [...(s.steps || [])]
+          if (steps[event.step_index]) {
+            steps[event.step_index] = {
+              ...steps[event.step_index],
+              command_output: event.output,
+              command_success: event.success,
+            }
+          }
+          return { ...s, steps }
         }))
+      }
+
+      if (event.type === 'remediation_completed' && event.session_id) {
+        setExecuting(false)
+        setCommandsReady(false)
+        setIsExecuted(true)
       }
     }
   }, [events])
@@ -144,23 +106,20 @@ export function RemediationPanel({ events, fetchApi, send, remediationSessions }
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [sessions, streamTexts])
 
-  const handleApproval = (sessionId: string, stepIndex: number, approved: boolean) => {
+  const handleExecuteAll = () => {
+    if (!activeSession) return
+    setExecuting(true)
+    setIsExecuted(false)
     send({
-      type: 'remediation_approval',
-      session_id: sessionId,
-      step_index: stepIndex,
-      approved,
-    })
-    const key = `${sessionId}:${stepIndex}`
-    setPendingApprovals(prev => {
-      const next = { ...prev }
-      delete next[key]
-      return next
+      type: 'remediation_execute_all',
+      session_id: activeSession,
     })
   }
 
   const active = sessions.find(s => s.session_id === activeSession)
   const streamText = activeSession ? (streamRef.current[activeSession] || '') : ''
+  const hasCommands = active?.steps?.some(s => s.command) ?? false
+  const allExecuted = active?.steps?.every(s => s.command_output !== null) ?? false
 
   const renderThinking = (text: string) => {
     if (!text) return null
@@ -211,13 +170,32 @@ export function RemediationPanel({ events, fetchApi, send, remediationSessions }
         <span style={{ fontSize: 13, color: '#94a3b8' }}>
           {sessions.length} session{sessions.length !== 1 ? 's' : ''}
         </span>
-        <span style={{ fontSize: 11, color: '#f59e0b', background: '#451a03', padding: '3px 10px', borderRadius: 4 }}>
-          Human approval required for each command
-        </span>
+        {commandsReady && !executing && !allExecuted && (
+          <button onClick={handleExecuteAll} style={{
+            padding: '6px 16px', borderRadius: 6, border: 'none', cursor: 'pointer',
+            fontSize: 12, fontWeight: 700,
+            background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: '#052e16',
+          }}>
+            Execute All Commands
+          </button>
+        )}
+        {executing && (
+          <span style={{
+            fontSize: 11, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 4,
+            animation: 'execPulse 1s infinite',
+          }}>
+            Executing commands...
+          </span>
+        )}
+        {allExecuted && !executing && (
+          <span style={{ fontSize: 11, color: '#22c55e' }}>
+            All commands executed
+          </span>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 14 }}>
-        <div style={{ ...boxStyle, maxHeight: 'calc(100vh - 150px)', overflowY: 'auto', padding: 12 }}>
+        <div style={{ ...boxStyle, maxHeight: 'calc(100vh - 150px)', overflowY: 'auto', padding: 10 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
             Sessions
           </div>
@@ -227,7 +205,7 @@ export function RemediationPanel({ events, fetchApi, send, remediationSessions }
             </div>
           ) : (
             sessions.map(s => (
-              <div key={s.session_id} onClick={() => setActiveSession(s.session_id)} style={{
+              <div key={s.session_id} onClick={() => { setActiveSession(s.session_id); setIsExecuted(false) }} style={{
                 padding: '8px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 4,
                 background: activeSession === s.session_id ? '#1e293b' : 'transparent',
                 border: '1px solid',
@@ -286,8 +264,7 @@ export function RemediationPanel({ events, fetchApi, send, remediationSessions }
               </div>
 
               {active.steps?.map((step, i) => {
-                const approvalKey = `${active.session_id}:${i}`
-                const needsApproval = pendingApprovals[approvalKey]
+                const cmdDone = step.command_output !== null
                 return (
                   <div key={i} style={{ marginBottom: 18 }}>
                     {step.thinking && (
@@ -325,13 +302,23 @@ export function RemediationPanel({ events, fetchApi, send, remediationSessions }
                           }}>
                             Command {i + 1}
                           </span>
-                          {needsApproval && (
+                          {executing && !cmdDone && (
                             <span style={{
-                              marginLeft: 'auto', fontSize: 10, color: '#f59e0b',
-                              background: '#451a03', padding: '2px 8px', borderRadius: 3,
+                              marginLeft: 'auto', fontSize: 10, color: '#22c55e',
+                              background: '#052e16', padding: '2px 8px', borderRadius: 3,
                               animation: 'pulse 1s infinite',
                             }}>
-                              AWAITING APPROVAL
+                              RUNNING
+                            </span>
+                          )}
+                          {cmdDone && (
+                            <span style={{
+                              marginLeft: 'auto', fontSize: 10,
+                              color: step.command_success ? '#22c55e' : '#ef4444',
+                              background: step.command_success ? '#052e16' : '#450a0a',
+                              padding: '2px 8px', borderRadius: 3,
+                            }}>
+                              {step.command_success ? 'SUCCESS' : 'FAILED'}
                             </span>
                           )}
                         </div>
@@ -343,15 +330,6 @@ export function RemediationPanel({ events, fetchApi, send, remediationSessions }
                         }}>
                           $ {step.command}
                         </div>
-
-                        {/* Human approval text input */}
-                        {needsApproval && (
-                          <ApprovalInput
-                            sessionId={active.session_id}
-                            stepIndex={i}
-                            onDecision={(approved) => handleApproval(active.session_id, i, approved)}
-                          />
-                        )}
 
                         {step.command_output !== null && (
                           <>
@@ -367,7 +345,7 @@ export function RemediationPanel({ events, fetchApi, send, remediationSessions }
                                 color: step.command_success ? '#22c55e' : '#ef4444',
                                 textTransform: 'uppercase', letterSpacing: 0.5,
                               }}>
-                                {step.command_success ? '✓ Output (success)' : '✗ Output (error)'}
+                                {step.command_success ? '✓ Output' : '✗ Output'}
                               </span>
                             </div>
                             <div style={{
@@ -461,7 +439,7 @@ export function RemediationPanel({ events, fetchApi, send, remediationSessions }
                       Remediation Failed
                     </span>
                   </div>
-                  <div style={{ color: '#fca5a5', fontSize: 12.5, lineHeight: 1.6 }}>
+                  <div style={{ color: '#fca5a5', fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                     {active.error}
                   </div>
                 </div>

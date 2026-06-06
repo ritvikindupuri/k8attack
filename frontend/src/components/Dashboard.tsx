@@ -11,6 +11,7 @@ interface Props {
   fetchApi: (path: string) => Promise<any>
   remediationReady: boolean
   remediationSessions: any[]
+  mitreAttack: any
 }
 
 const severityColors: Record<string, string> = {
@@ -141,15 +142,13 @@ function InfoTooltip({ label, description }: { label: string; description: strin
 export function Dashboard({
   clusterInfo, attackHistory, detectionEvents, infrastructureItems,
   orchestratorStatus, events, send, fetchApi,
-  remediationReady, remediationSessions,
+  remediationReady, remediationSessions, mitreAttack,
 }: Props) {
   const [attacks, setAttacks] = useState<any[]>([])
-  const [mitre, setMitre] = useState<any>(null)
   const [clusterLoading, setClusterLoading] = useState(false)
   const [severityFilter, setSeverityFilter] = useState<string>('all')
 
   useEffect(() => {
-    fetchApi('/api/attacks/mitre').then(d => d?.mitre_attack && setMitre(d.mitre_attack))
     fetchApi('/api/health').then(d => d?.remediation_ready && setRemediationReady(true))
   }, [])
 
@@ -336,9 +335,9 @@ export function Dashboard({
             MITRE ATT&CK Coverage
             <InfoTooltip label="MITRE" description="MITRE ATT&CK tactics covered by completed attacks. Click any box to open the MITRE page for that tactic. Boxes light up green once an attack for that tactic completes." />
           </div>
-          {mitre ? (
+          {mitreAttack ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 6 }}>
-              {Object.entries(mitre).map(([key, tactic]: [string, any]) => {
+              {Object.entries(mitreAttack).map(([key, tactic]: [string, any]) => {
                 const completedHere = attackHistory.filter(
                   (a: any) => (a.mitre_tactic || a.result?.mitre_tactic) === key && a.status === 'completed'
                 ).length
