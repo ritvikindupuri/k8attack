@@ -1,13 +1,20 @@
 import asyncio
 import json
 import os
+import sys
 import time
 from typing import Dict, Any
 from contextlib import asynccontextmanager
 
+import glob
+
+_backend_dir = os.path.dirname(os.path.abspath(__file__))
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
 from pydantic import BaseModel
 
 from report.generator import generate_report
@@ -406,6 +413,38 @@ async def generate_security_report():
             "Content-Disposition": f"attachment; filename=k8s-security-report-{int(time.time())}.pdf",
             "Content-Type": "application/pdf",
         },
+    )
+
+
+RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
+
+
+def _load_latest_results() -> dict | None:
+    try:
+        files = sorted(glob.glob(os.path.join(RESULTS_DIR, "findings_*.json")), reverse=True)
+        if not files:
+            return None
+        with open(files[0]) as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+@app.get("/api/results")
+async def get_results():
+    data = _load_latest_results()
+    if not data:
+        raise HTTPException(status_code=404, detail="No results found. Run `python cli.py` first.")
+    return data
+
+
+@app.get("/")
+async def root():
+    return HTMLResponse(
+        "<h1>KARMA — K8s Attack & Remediation Mapping Agent</h1>"
+        "<p><a href='/docs'>API Docs</a></p>"
+        "<p><a href='/api/results'>Latest Results</a></p>"
+        "<p>Use <code>python cli.py</code> for the interactive CLI.</p>"
     )
 
 

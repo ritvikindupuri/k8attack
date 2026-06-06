@@ -199,7 +199,7 @@ Begin your analysis and remediation immediately."""
                     current_text += text
                     await self._process_stream_text(session, current_text, text)
 
-            # Phase 2: Wait for user to trigger execution
+            # Phase 2: Auto-execute all commands immediately
             has_commands = len([s for s in session.steps if s.command is not None]) > 0
             if has_commands:
                 await self._broadcast({
@@ -208,14 +208,6 @@ Begin your analysis and remediation immediately."""
                     "command_count": len([s for s in session.steps if s.command is not None]),
                 })
 
-                event = asyncio.Event()
-                self._session_execute_events[session.session_id] = event
-                try:
-                    await asyncio.wait_for(event.wait(), timeout=600.0)
-                except asyncio.TimeoutError:
-                    pass
-
-                # Execute all commands sequentially
                 for step_index, step in enumerate(session.steps):
                     if step.command:
                         await self._execute_command(session, step, step_index)

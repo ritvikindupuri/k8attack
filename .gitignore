@@ -11,3 +11,4 @@ build/
 .vite/
 *.local
 .DS_Store
+results/
