@@ -168,6 +168,12 @@ Select option **14** to see nodes, pods, services, and resource capacity.
 
 ---
 
+## Architecture
+
+<img src="karma-architecture.svg" alt="KARMA System Architecture" width="100%"/>
+
+---
+
 ## Remediation
 
 When `ANTHROPIC_API_KEY` is set, the Full Engagement mode triggers Claude Sonnet 4 after each high/critical severity attack. The remediation agent:

@@ -1,0 +1,252 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" font-family="'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <linearGradient id="cli" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1f6feb"/>
+      <stop offset="100%" stop-color="#58a6ff"/>
+    </linearGradient>
+    <linearGradient id="engine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0e4429"/>
+      <stop offset="100%" stop-color="#238636"/>
+    </linearGradient>
+    <linearGradient id="cluster" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9e6a03"/>
+      <stop offset="100%" stop-color="#d29922"/>
+    </linearGradient>
+    <linearGradient id="remediation" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8b3b6b"/>
+      <stop offset="100%" stop-color="#bc8cff"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#8b949e"/>
+    </marker>
+    <marker id="arrow-accent" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#58a6ff"/>
+    </marker>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="620" fill="url(#bg)" rx="12"/>
+
+  <!-- Title -->
+  <text x="450" y="36" text-anchor="middle" fill="#58a6ff" font-size="18" font-weight="700" letter-spacing="2">KARMA — System Architecture</text>
+  <text x="450" y="54" text-anchor="middle" fill="#8b949e" font-size="11" letter-spacing="1">Kubernetes Attack &amp; Remediation Mapping Agent</text>
+
+  <!-- ═══════ LAYER LABELS ═══════ -->
+  <text x="24" y="90" fill="#8b949e" font-size="10" letter-spacing="1.5" font-weight="600">INTERFACE</text>
+  <line x1="24" y1="94" x2="120" y2="94" stroke="#30363d" stroke-width="1"/>
+
+  <text x="24" y="220" fill="#8b949e" font-size="10" letter-spacing="1.5" font-weight="600">CORE ENGINE</text>
+  <line x1="24" y1="224" x2="130" y2="224" stroke="#30363d" stroke-width="1"/>
+
+  <text x="24" y="420" fill="#8b949e" font-size="10" letter-spacing="1.5" font-weight="600">EXTERNAL</text>
+  <line x1="24" y1="424" x2="100" y2="424" stroke="#30363d" stroke-width="1"/>
+
+  <!-- ═══════ LAYER 1: CLI ═══════ -->
+  <!-- CLI Box -->
+  <rect x="200" y="74" width="500" height="110" rx="8" fill="#161b22" stroke="#1f6feb" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="200" y="74" width="500" height="28" rx="8" fill="url(#cli)" opacity="0.15"/>
+  <text x="450" y="92" text-anchor="middle" fill="#58a6ff" font-size="12" font-weight="700">Interactive CLI</text>
+  <text x="240" y="92" text-anchor="middle" fill="#1f6feb" font-size="9">cli.py</text>
+
+  <rect x="220" y="112" width="140" height="56" rx="6" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="290" y="130" text-anchor="middle" fill="#c9d1d9" font-size="10" font-weight="600">Interactive Menu</text>
+  <text x="290" y="144" text-anchor="middle" fill="#8b949e" font-size="9">Options 1–14</text>
+  <text x="290" y="158" text-anchor="middle" fill="#8b949e" font-size="9">Attack Selection</text>
+
+  <rect x="380" y="112" width="140" height="56" rx="6" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="450" y="130" text-anchor="middle" fill="#c9d1d9" font-size="10" font-weight="600">Live Terminal Output</text>
+  <text x="450" y="144" text-anchor="middle" fill="#8b949e" font-size="9">Thinking → Command</text>
+  <text x="450" y="158" text-anchor="middle" fill="#8b949e" font-size="9">→ Output</text>
+
+  <rect x="540" y="112" width="140" height="56" rx="6" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="610" y="130" text-anchor="middle" fill="#c9d1d9" font-size="10" font-weight="600">Results Viewer</text>
+  <text x="610" y="144" text-anchor="middle" fill="#8b949e" font-size="9">MITRE Grid</text>
+  <text x="610" y="158" text-anchor="middle" fill="#8b949e" font-size="9">Summary Table</text>
+
+  <!-- ═══════ LAYER 2: CORE ENGINE ═══════ -->
+  <!-- FastAPI -->
+  <rect x="34" y="206" width="190" height="180" rx="8" fill="#161b22" stroke="#238636" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="34" y="206" width="190" height="28" rx="8" fill="url(#engine)" opacity="0.15"/>
+  <text x="129" y="224" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="700">FastAPI Server</text>
+  <text x="129" y="224" text-anchor="middle" fill="#238636" font-size="9" dy="-12">main.py</text>
+
+  <rect x="48" y="244" width="162" height="26" rx="4" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="129" y="261" text-anchor="middle" fill="#c9d1d9" font-size="10">GET /api/results</text>
+
+  <rect x="48" y="276" width="162" height="26" rx="4" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="129" y="293" text-anchor="middle" fill="#c9d1d9" font-size="10">GET /api/report</text>
+
+  <rect x="48" y="308" width="162" height="26" rx="4" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="129" y="325" text-anchor="middle" fill="#c9d1d9" font-size="10">POST /api/chat</text>
+
+  <rect x="48" y="340" width="162" height="26" rx="4" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="129" y="357" text-anchor="middle" fill="#c9d1d9" font-size="10">WebSocket /ws</text>
+
+  <!-- Attack Engine -->
+  <rect x="252" y="206" width="270" height="180" rx="8" fill="#161b22" stroke="#238636" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="252" y="206" width="270" height="28" rx="8" fill="url(#engine)" opacity="0.15"/>
+  <text x="387" y="224" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="700">Attack Engine</text>
+  <text x="387" y="224" text-anchor="middle" fill="#238636" font-size="9" dy="-12">attack_engine/</text>
+
+  <!-- Attack modules grid -->
+  <rect x="264" y="244" width="117" height="44" rx="4" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="322" y="258" text-anchor="middle" fill="#f78166" font-size="8" font-weight="600">PRIVILEGE ESCALATION</text>
+  <text x="322" y="272" text-anchor="middle" fill="#8b949e" font-size="8">HostPath · RBAC · Escape</text>
+
+  <rect x="392" y="244" width="117" height="44" rx="4" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="450" y="258" text-anchor="middle" fill="#d29922" font-size="8" font-weight="600">COLLECTION</text>
+  <text x="450" y="272" text-anchor="middle" fill="#8b949e" font-size="8">Secrets · ConfigMap · DNS</text>
+
+  <rect x="264" y="296" width="117" height="44" rx="4" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="322" y="310" text-anchor="middle" fill="#d29922" font-size="8" font-weight="600">DISCOVERY</text>
+  <text x="322" y="324" text-anchor="middle" fill="#8b949e" font-size="8">Network Scan · Kubelet API</text>
+
+  <rect x="392" y="296" width="117" height="44" rx="4" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="450" y="310" text-anchor="middle" fill="#f78166" font-size="8" font-weight="600">IMPACT</text>
+  <text x="450" y="324" text-anchor="middle" fill="#8b949e" font-size="8">Resource Hijacking</text>
+
+  <rect x="264" y="348" width="245" height="26" rx="4" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="386" y="365" text-anchor="middle" fill="#8b949e" font-size="9">10 attack modules × MITRE ATT&amp;CK mapped</text>
+
+  <!-- Detection + WS -->
+  <rect x="550" y="206" width="135" height="82" rx="8" fill="#161b22" stroke="#238636" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="550" y="206" width="135" height="28" rx="8" fill="url(#engine)" opacity="0.15"/>
+  <text x="617" y="224" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="700">Detection</text>
+  <text x="617" y="224" text-anchor="middle" fill="#238636" font-size="9" dy="-12">monitor.py</text>
+  <text x="617" y="254" text-anchor="middle" fill="#8b949e" font-size="9">K8s Watch API</text>
+  <text x="617" y="268" text-anchor="middle" fill="#8b949e" font-size="9">7 Alert Rules</text>
+  <text x="617" y="282" text-anchor="middle" fill="#8b949e" font-size="9">Real-time Events</text>
+
+  <rect x="550" y="302" width="135" height="82" rx="8" fill="#161b22" stroke="#238636" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="550" y="302" width="135" height="28" rx="8" fill="url(#engine)" opacity="0.15"/>
+  <text x="617" y="320" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="700">WebSocket Mgr</text>
+  <text x="617" y="320" text-anchor="middle" fill="#238636" font-size="9" dy="-12">handler.py</text>
+  <text x="617" y="348" text-anchor="middle" fill="#8b949e" font-size="9">Live Broadcast</text>
+  <text x="617" y="362" text-anchor="middle" fill="#8b949e" font-size="9">Client Connections</text>
+
+  <rect x="710" y="206" width="160" height="85" rx="8" fill="#161b22" stroke="#238636" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="710" y="206" width="160" height="28" rx="8" fill="url(#engine)" opacity="0.15"/>
+  <text x="790" y="224" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="700">Cluster Manager</text>
+  <text x="790" y="224" text-anchor="middle" fill="#238636" font-size="9" dy="-12">manager.py</text>
+  <text x="790" y="252" text-anchor="middle" fill="#8b949e" font-size="9">kind create / delete</text>
+  <text x="790" y="266" text-anchor="middle" fill="#8b949e" font-size="9">k8s API (core/RBAC)</text>
+  <text x="790" y="280" text-anchor="middle" fill="#8b949e" font-size="9">Vulnerable Configs</text>
+
+  <!-- ═══════ LAYER 3: EXTERNAL ═══════ -->
+  <!-- Kind Cluster -->
+  <rect x="200" y="408" width="210" height="90" rx="8" fill="#161b22" stroke="#d29922" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="200" y="408" width="210" height="28" rx="8" fill="url(#cluster)" opacity="0.15"/>
+  <text x="305" y="426" text-anchor="middle" fill="#d29922" font-size="12" font-weight="700">Kind Cluster</text>
+
+  <circle cx="260" cy="462" r="6" fill="#3fb950"/>
+  <text x="272" y="466" fill="#c9d1d9" font-size="10">Control Plane</text>
+  <circle cx="260" cy="482" r="6" fill="#3fb950"/>
+  <text x="272" y="486" fill="#c9d1d9" font-size="10">Worker Node 1</text>
+  <circle cx="376" cy="482" r="6" fill="#3fb950"/>
+  <text x="388" y="486" fill="#c9d1d9" font-size="10">Worker Node 2</text>
+
+  <!-- Anthropic -->
+  <rect x="490" y="408" width="210" height="90" rx="8" fill="#161b22" stroke="#bc8cff" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="490" y="408" width="210" height="28" rx="8" fill="url(#remediation)" opacity="0.15"/>
+  <text x="595" y="426" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="700">Anthropic Claude API</text>
+
+  <rect x="504" y="446" width="182" height="22" rx="4" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="595" y="461" text-anchor="middle" fill="#c9d1d9" font-size="10">claude-sonnet-4-20250514</text>
+
+  <text x="595" y="488" text-anchor="middle" fill="#8b949e" font-size="9">Chain-of-thought reasoning</text>
+
+  <!-- Docker -->
+  <rect x="730" y="408" width="140" height="90" rx="8" fill="#161b22" stroke="#d29922" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="730" y="408" width="140" height="28" rx="8" fill="url(#cluster)" opacity="0.15"/>
+  <text x="800" y="426" text-anchor="middle" fill="#d29922" font-size="12" font-weight="700">Docker</text>
+  <text x="800" y="462" text-anchor="middle" fill="#8b949e" font-size="9">Container Runtime</text>
+  <text x="800" y="482" text-anchor="middle" fill="#8b949e" font-size="9">29.5.2</text>
+
+  <!-- Remediation overlay -->
+  <rect x="490" y="508" width="210" height="48" rx="8" fill="#161b22" stroke="#bc8cff" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="490" y="508" width="210" height="48" rx="8" fill="url(#remediation)" opacity="0.1"/>
+  <text x="595" y="528" text-anchor="middle" fill="#bc8cff" font-size="12" font-weight="700">Remediation Agent</text>
+  <text x="595" y="544" text-anchor="middle" fill="#8b949e" font-size="9">Autonomous kubectl commands</text>
+
+  <!-- Report -->
+  <rect x="200" y="508" width="210" height="48" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="305" y="528" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="700">PDF Report</text>
+  <text x="305" y="544" text-anchor="middle" fill="#8b949e" font-size="9">generator.py · ReportLab</text>
+
+  <!-- ═══════ ARROWS ═══════ -->
+
+  <!-- CLI → Attack Engine -->
+  <line x1="450" y1="184" x2="450" y2="206" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow-accent)" stroke-dasharray="4,2"/>
+
+  <!-- CLI → FastAPI -->
+  <line x1="350" y1="184" x2="129" y2="206" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow-accent)" stroke-dasharray="4,2"/>
+
+  <!-- CLI → Detection -->
+  <line x1="550" y1="184" x2="617" y2="206" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow-accent)" stroke-dasharray="4,2"/>
+
+  <!-- CLI → Cluster Mgr -->
+  <line x1="550" y1="184" x2="790" y2="206" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow-accent)" stroke-dasharray="4,2"/>
+
+  <!-- Attack Engine → Cluster Manager -->
+  <line x1="522" y1="350" x2="710" y2="280" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Attack Engine → kind cluster -->
+  <line x1="387" y1="386" x2="305" y2="408" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Detection → Kind -->
+  <line x1="617" y1="288" x2="617" y2="408" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Cluster Mgr → Kind -->
+  <line x1="790" y1="291" x2="790" y2="350" stroke="#8b949e" stroke-width="1"/>
+  <line x1="790" y1="350" x2="305" y2="350" stroke="#8b949e" stroke-width="1"/>
+  <line x1="305" y1="350" x2="305" y2="408" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Detection → WS Mgr -->
+  <line x1="617" y1="288" x2="617" y2="302" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- WS Mgr → CLI -->
+  <line x1="617" y1="302" x2="617" y2="184" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Kind → Remediation -->
+  <line x1="420" y1="460" x2="490" y2="460" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Remediation → Claude API -->
+  <line x1="595" y1="486" x2="595" y2="508" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Claude → Remediation -->
+  <line x1="595" y1="508" x2="595" y2="556" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Remediation → Kind -->
+  <line x1="490" y1="530" x2="420" y2="530" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="420" y1="530" x2="420" y2="498" stroke="#8b949e" stroke-width="1"/>
+
+  <!-- Kind → Docker -->
+  <line x1="420" y1="460" x2="730" y2="460" stroke="#30363d" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- Report Generator -->
+  <line x1="305" y1="386" x2="305" y2="508" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- FastAPI → Report -->
+  <line x1="224" y1="350" x2="260" y2="508" stroke="#8b949e" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Legend -->
+  <rect x="34" y="574" width="12" height="12" rx="2" fill="#1f6feb" opacity="0.6"/>
+  <text x="52" y="584" fill="#8b949e" font-size="9">CLI Layer</text>
+  <rect x="130" y="574" width="12" height="12" rx="2" fill="#238636" opacity="0.6"/>
+  <text x="148" y="584" fill="#8b949e" font-size="9">Backend Engine</text>
+  <rect x="260" y="574" width="12" height="12" rx="2" fill="#d29922" opacity="0.6"/>
+  <text x="278" y="584" fill="#8b949e" font-size="9">Infrastructure</text>
+  <rect x="390" y="574" width="12" height="12" rx="2" fill="#bc8cff" opacity="0.6"/>
+  <text x="408" y="584" fill="#8b949e" font-size="9">AI / Remediation</text>
+</svg>
