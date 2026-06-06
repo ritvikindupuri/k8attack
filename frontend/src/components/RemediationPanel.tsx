@@ -31,6 +31,68 @@ const pulseStyle = `
 @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 `
 
+function ApprovalInput({ sessionId, stepIndex, onDecision }: {
+  sessionId: string
+  stepIndex: number
+  onDecision: (approved: boolean) => void
+}) {
+  const [inputValue, setInputValue] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+
+  const handleSubmit = (value: string) => {
+    const trimmed = value.trim().toLowerCase()
+    if (trimmed === 'allow' || trimmed === 'reject') {
+      setSubmitted(true)
+      onDecision(trimmed === 'allow')
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleSubmit(inputValue)
+  }
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 4,
+      padding: '8px 10px', borderTop: '1px solid #292524',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 9, color: '#f59e0b', animation: 'pulse 1s infinite' }}>
+          ●
+        </span>
+        <span style={{ fontSize: 9, color: '#fbbf24', fontWeight: 600 }}>
+          HUMAN APPROVAL REQUIRED — Type <span style={{ color: '#22c55e' }}>allow</span> or <span style={{ color: '#ef4444' }}>reject</span> to continue
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={submitted}
+          placeholder='Type "allow" to execute or "reject" to skip...'
+          style={{
+            flex: 1, padding: '5px 8px', borderRadius: 4, border: '1px solid #444',
+            background: submitted ? '#1a1a2e' : '#0f172a', color: '#e0e0e0',
+            fontSize: 10.5, fontFamily: '"JetBrains Mono", monospace', outline: 'none',
+          }}
+        />
+        <button onClick={() => handleSubmit(inputValue)} disabled={submitted} style={{
+          padding: '5px 12px', borderRadius: 4, border: 'none', cursor: submitted ? 'default' : 'pointer',
+          fontSize: 10, fontWeight: 700, background: '#6366f1', color: '#e0e0e0',
+          opacity: submitted ? 0.5 : 1,
+        }}>
+          Submit
+        </button>
+      </div>
+      <div style={{ fontSize: 8, color: '#64748b' }}>
+        Auto-skips after 60s if no response
+      </div>
+    </div>
+  )
+}
+
 export function RemediationPanel({ events, fetchApi, send, remediationSessions }: Props) {
   const [sessions, setSessions] = useState<RemediationSession[]>([])
   const [activeSession, setActiveSession] = useState<string | null>(null)
@@ -282,32 +344,13 @@ export function RemediationPanel({ events, fetchApi, send, remediationSessions }
                           $ {step.command}
                         </div>
 
-                        {/* Human approval buttons */}
+                        {/* Human approval text input */}
                         {needsApproval && (
-                          <div style={{
-                            display: 'flex', gap: 6, padding: '8px 10px',
-                            borderTop: '1px solid #292524',
-                          }}>
-                            <button onClick={() => handleApproval(active.session_id, i, true)} style={{
-                              padding: '5px 14px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                              fontSize: 10, fontWeight: 700,
-                              background: '#22c55e', color: '#052e16',
-                            }}>
-                              ✓ Approve & Execute
-                            </button>
-                            <button onClick={() => handleApproval(active.session_id, i, false)} style={{
-                              padding: '5px 14px', borderRadius: 6, border: '1px solid #7f1d1d', cursor: 'pointer',
-                              fontSize: 10, fontWeight: 600,
-                              background: 'transparent', color: '#ef4444',
-                            }}>
-                              ✕ Reject & Skip
-                            </button>
-                            <span style={{
-                              fontSize: 9, color: '#f59e0b', display: 'flex', alignItems: 'center', marginLeft: 4,
-                            }}>
-                              ⏱ Auto-skip in 60s if no response
-                            </span>
-                          </div>
+                          <ApprovalInput
+                            sessionId={active.session_id}
+                            stepIndex={i}
+                            onDecision={(approved) => handleApproval(active.session_id, i, approved)}
+                          />
                         )}
 
                         {step.command_output !== null && (

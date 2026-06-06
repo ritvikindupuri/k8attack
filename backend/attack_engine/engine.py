@@ -65,6 +65,9 @@ class AttackEngine:
             "name": attack_instance.name,
             "status": AttackStatus.RUNNING.value,
             "start_time": time.time(),
+            "mitre_tactic": attack_instance.mitre_tactic,
+            "severity": attack_instance.severity.value,
+            "description": attack_instance.description,
         }
 
         if self.ws_manager:
@@ -88,6 +91,9 @@ class AttackEngine:
                 "status": result["status"],
                 "start_time": result.get("start_time"),
                 "end_time": result.get("end_time"),
+                "mitre_tactic": attack_instance.mitre_tactic,
+                "severity": attack_instance.severity.value,
+                "description": attack_instance.description,
                 "result": result,
             }
             self.attack_history.append(result)
@@ -113,6 +119,9 @@ class AttackEngine:
                 "attack_id": attack_id,
                 "name": attack_instance.name,
                 "status": AttackStatus.FAILED.value,
+                "mitre_tactic": attack_instance.mitre_tactic,
+                "severity": attack_instance.severity.value,
+                "description": attack_instance.description,
                 "error": str(e),
             }
             if self.ws_manager:
