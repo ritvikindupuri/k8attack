@@ -76,7 +76,8 @@ Select option **11** (Run All Attacks) to see the full workflow.
 
 ```bash
 # Install prerequisites
-brew install kind kubectl docker python@3.11
+brew install kind kubectl python@3.11
+brew install --cask docker
 
 # Clone and set up
 git clone https://github.com/ritvikindupuri/k8attack.git
@@ -167,45 +168,6 @@ Select option **14** to see nodes, pods, services, and resource capacity.
 
 ---
 
-## Architecture
-
-```
-k8attack/
-├── cli.py                          # Interactive CLI menu + execution
-├── results/                        # Generated engagement results (JSON)
-├── backend/
-│   ├── main.py                     # FastAPI app, REST endpoints, WebSocket
-│   ├── requirements.txt            # Python dependencies
-│   ├── attack_engine/
-│   │   ├── engine.py               # Attack lifecycle management
-│   │   ├── mitre.py                # MITRE ATT&CK tactic definitions
-│   │   ├── orchestrator.py         # Sequential attack runner
-│   │   └── attacks/
-│   │       ├── base.py             # BaseAttack abstract class
-│   │       ├── privilege_escalation.py
-│   │       ├── container_escape.py
-│   │       ├── secrets_access.py
-│   │       ├── network_scan.py
-│   │       ├── resource_hijack.py
-│   │       └── dns_exfiltration.py
-│   ├── cluster_manager/
-│   │   └── manager.py              # Kind cluster lifecycle
-│   ├── detection/
-│   │   └── monitor.py              # K8s watch-based detection
-│   ├── remediation/
-│   │   └── agent.py                # Claude remediation agent
-│   ├── report/
-│   │   └── generator.py            # PDF report generation
-│   ├── chat/
-│   │   └── handler.py              # AI security chat
-│   └── ws_manager/
-│       └── handler.py              # WebSocket connection manager
-└── scripts/
-    └── setup.sh                    # Automated setup (macOS/Linux)
-```
-
----
-
 ## Remediation
 
 When `ANTHROPIC_API_KEY` is set, the Full Engagement mode triggers Claude Sonnet 4 after each high/critical severity attack. The remediation agent:
@@ -248,7 +210,7 @@ Start the API server:
 
 ```bash
 cd backend
-python main.py
+python3 main.py
 ```
 
 ---
