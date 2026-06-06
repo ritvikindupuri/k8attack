@@ -45,20 +45,7 @@ export function RemediationPanel({ events, fetchApi }: Props) {
     return () => { style.remove() }
   }, [])
 
-  // Load sessions from API
-  useEffect(() => {
-    fetchApi('/api/remediation/sessions').then(d => {
-      if (d?.sessions) {
-        d.sessions.forEach((s: RemediationSession) => {
-          sessionsRef.current.set(s.session_id, s)
-        })
-        setSessions(Array.from(sessionsRef.current.values()).sort((a, b) => b.created_at - a.created_at))
-        if (d.sessions.length > 0 && !activeSession) {
-          setActiveSession(d.sessions[0].session_id)
-        }
-      }
-    })
-  }, [])
+  // Start completely clean — sessions arrive via WebSocket events only
 
   const processedEventIds = useRef<Set<number>>(new Set())
 

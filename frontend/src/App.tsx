@@ -115,19 +115,7 @@ export default function App() {
     } catch { return null }
   }, [])
 
-  useEffect(() => {
-    fetchApi('/api/attacks').then(d => {
-      if (!d?.attacks) return
-      setAttackHistory(d.attacks.map((a: any) => ({
-        attack_id: a.id,
-        name: a.name,
-        status: 'pending',
-        description: a.description,
-        mitre_tactic: a.mitre_tactic,
-        mitre_techniques: a.mitre_techniques,
-      })))
-    })
-  }, [])
+  // No pre-population — everything starts clean
 
   const activeRemediationCount = remediationSessions.filter(
     s => s.status === 'running' || s.status === 'pending'

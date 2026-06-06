@@ -105,6 +105,39 @@ function SeverityTooltip({ severity }: { severity: string }) {
   )
 }
 
+function InfoTooltip({ label, description }: { label: string; description: string }) {
+  const [show, setShow] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+
+  return (
+    <span ref={ref} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', marginLeft: 6 }}>
+      <span
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        style={{
+          width: 13, height: 13, borderRadius: '50%', display: 'inline-flex',
+          alignItems: 'center', justifyContent: 'center', cursor: 'help',
+          background: '#1e293b', color: '#64748b',
+          fontSize: 8, fontWeight: 700, lineHeight: 1,
+        }}
+      >i</span>
+      {show && (
+        <div style={{
+          position: 'absolute', zIndex: 1000, bottom: 'calc(100% + 6px)', left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#1e293b', border: '1px solid #334155', borderRadius: 6,
+          padding: '6px 10px', width: 200,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+          pointerEvents: 'none', fontSize: 9, color: '#94a3b8', lineHeight: 1.4,
+          whiteSpace: 'normal',
+        }}>
+          {description}
+        </div>
+      )}
+    </span>
+  )
+}
+
 export function Dashboard({
   clusterInfo, attackHistory, detectionEvents, infrastructureItems,
   orchestratorStatus, events, send, fetchApi,
@@ -113,16 +146,21 @@ export function Dashboard({
   const [attacks, setAttacks] = useState<any[]>([])
   const [mitre, setMitre] = useState<any>(null)
   const [clusterLoading, setClusterLoading] = useState(false)
+  const [severityFilter, setSeverityFilter] = useState<string>('all')
 
   useEffect(() => {
-    fetchApi('/api/attacks').then(d => d?.attacks && setAttacks(d.attacks))
     fetchApi('/api/attacks/mitre').then(d => d?.mitre_attack && setMitre(d.mitre_attack))
     fetchApi('/api/health').then(d => d?.remediation_ready && setRemediationReady(true))
-    fetchApi('/api/remediation/sessions').then(d => {
-      if (d?.sessions) setSessions(d.sessions)
-    })
-    fetchApi('/api/attacks/orchestrator').then(d => setOrchStatus(d))
   }, [])
+
+  // Poll cluster info every 10s via WebSocket
+  useEffect(() => {
+    if (!clusterInfo?.ready) return
+    const interval = setInterval(() => {
+      send({ type: 'get_cluster_info' })
+    }, 10000)
+    return () => clearInterval(interval)
+  }, [clusterInfo?.ready, send])
 
   const [remediationReadyLocal, setRemediationReady] = useState(false)
   const [sessions, setSessions] = useState<any[]>([])
@@ -293,8 +331,11 @@ export function Dashboard({
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
         {/* MITRE ATT&CK Matrix */}
         <div style={boxStyle}>
-          <div style={{ ...labelStyle, fontSize: 11 }}>MITRE ATT&CK Coverage</div>
-          {mitre ? (
+          <div style={{ ...labelStyle, fontSize: 11, display: 'flex', alignItems: 'center' }}>
+            MITRE ATT&CK Coverage
+            <InfoTooltip label="MITRE" description="MITRE ATT&CK tactics covered by completed attacks. Click any box to open the MITRE page for that tactic. Boxes light up green once an attack for that tactic completes." />
+          </div>
+          {mitre && attackHistory.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 6 }}>
               {Object.entries(mitre).map(([key, tactic]: [string, any]) => {
                 const completedHere = attackHistory.filter(
@@ -330,13 +371,16 @@ export function Dashboard({
               })}
             </div>
           ) : (
-            <div style={{ color: '#475569', fontSize: 11, textAlign: 'center', padding: 16 }}>Loading...</div>
+            <div style={{ color: '#475569', fontSize: 11, textAlign: 'center', padding: 16 }}>Run attacks to see MITRE coverage</div>
           )}
         </div>
 
         {/* Attack Progress */}
         <div style={boxStyle}>
-          <div style={{ ...labelStyle, fontSize: 11 }}>Attack Progress</div>
+          <div style={{ ...labelStyle, fontSize: 11, display: 'flex', alignItems: 'center' }}>
+            Attack Progress
+            <InfoTooltip label="Attacks" description="Status of each executed attack — pending, running, completed, or failed. Severity badges with tooltips explain the risk level of each attack." />
+          </div>
           {attackHistory.length === 0 ? (
             <div style={{ color: '#475569', fontSize: 11, textAlign: 'center', padding: 20 }}>
               Click "Deploy Cluster & Run Attacks" to start
@@ -385,7 +429,10 @@ export function Dashboard({
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
         {/* Infrastructure affected */}
         <div style={boxStyle}>
-          <div style={labelStyle}>Affected Infrastructure</div>
+          <div style={{ ...labelStyle, display: 'flex', alignItems: 'center' }}>
+            Affected Infrastructure
+            <InfoTooltip label="Infrastructure" description="Kubernetes resources created or modified by attacks, including pods, secrets, ConfigMaps, and RBAC bindings." />
+          </div>
           {infrastructureItems.length === 0 ? (
             <div style={{ color: '#475569', fontSize: 11, textAlign: 'center', padding: 16 }}>No infrastructure affected yet</div>
           ) : (
@@ -411,12 +458,30 @@ export function Dashboard({
 
         {/* Detection alerts */}
         <div style={boxStyle}>
-          <div style={labelStyle}>Detection Alerts</div>
-          {detectionEvents.length === 0 ? (
-            <div style={{ color: '#475569', fontSize: 11, textAlign: 'center', padding: 16 }}>No alerts yet</div>
-          ) : (
-            <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-              {detectionEvents.slice(0, 15).map((e: any, i: number) => (
+          <div style={{ ...labelStyle, display: 'flex', alignItems: 'center' }}>
+            Detection Alerts
+            <InfoTooltip label="Alerts" description="Security alerts generated by the detection monitor during attacks. Filter by severity to focus on critical or high-priority incidents." />
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            {['all', 'critical', 'high', 'medium', 'low'].map(s => (
+              <button key={s} onClick={() => setSeverityFilter(s)} style={{
+                padding: '2px 8px', borderRadius: 4, border: '1px solid', cursor: 'pointer',
+                fontSize: 9, fontWeight: 600, textTransform: 'capitalize',
+                background: severityFilter === s ? (s === 'all' ? '#1e293b' : `${severityColors[s] || '#64748b'}20`) : 'transparent',
+                color: severityFilter === s ? (s === 'all' ? '#cbd5e1' : severityColors[s] || '#94a3b8') : '#64748b',
+                borderColor: severityFilter === s ? (s === 'all' ? '#334155' : severityColors[s] || '#334155') : '#1e293b',
+              }}>{s === 'all' ? 'All' : s}</button>
+            ))}
+          </div>
+          {(() => {
+            const filtered = severityFilter === 'all'
+              ? detectionEvents
+              : detectionEvents.filter((e: any) => e.severity === severityFilter)
+            return filtered.length === 0 ? (
+              <div style={{ color: '#475569', fontSize: 11, textAlign: 'center', padding: 16 }}>No alerts yet</div>
+            ) : (
+              <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+                {filtered.slice(0, 15).map((e: any, i: number) => (
                 <div key={i} style={{
                   display: 'flex', gap: 6, padding: '4px 0', borderBottom: '1px solid #1e293b',
                   fontSize: 10, alignItems: 'center',
@@ -437,13 +502,17 @@ export function Dashboard({
                 </div>
               ))}
             </div>
-          )}
+            )
+          })()}
         </div>
 
         {/* Live event feed */}
         <div style={boxStyle}>
-          <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Live Event Feed</span>
+          <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ display: 'flex', alignItems: 'center' }}>
+              Live Event Feed
+              <InfoTooltip label="Events" description="Real-time event stream of all platform activity — attack events, detection alerts, infrastructure changes, and remediation status updates." />
+            </span>
             <span style={{ color: '#475569' }}>{events.length} events</span>
           </div>
           <div style={{ maxHeight: 200, overflowY: 'auto', fontSize: 10, fontFamily: '"JetBrains Mono", monospace' }}>
@@ -479,7 +548,10 @@ export function Dashboard({
       {/* Attack Logs */}
       <div style={{ ...boxStyle, marginTop: 14 }}>
         <div style={{ ...labelStyle, fontSize: 11, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Attack Logs</span>
+          <span style={{ display: 'flex', alignItems: 'center' }}>
+            Attack Logs
+            <InfoTooltip label="Logs" description="Detailed logs for each attack, including terminal-style command blocks with kubectl commands and raw output. Click to expand/collapse." />
+          </span>
           <span style={{ color: '#475569', fontSize: 10, fontWeight: 400 }}>
             {attackHistory.filter(a => (a.events?.length || 0) > 0).length} attacks with logs
           </span>
@@ -673,8 +745,8 @@ export function Dashboard({
             {chatMessages.map((m, i) => (
               <div key={i} style={{
                 marginBottom: 10, padding: 10, borderRadius: 8,
-                background: m.role === 'user' ? '#1e293b' : '#0a0e17',
-                border: m.role === 'assistant' ? '1px solid #162032' : 'none',
+                background: m.role === 'user' ? '#1e293b' : 'transparent',
+                border: m.role === 'assistant' ? 'none' : 'none',
               }}>
                 <div style={{ fontSize: 9, color: '#64748b', marginBottom: 4, fontWeight: 600 }}>
                   {m.role === 'user' ? 'You' : 'Claude'}
@@ -683,24 +755,20 @@ export function Dashboard({
                   fontSize: 10.5, lineHeight: 1.6, color: '#cbd5e1',
                   whiteSpace: 'pre-wrap',
                 }}>
-                  {m.content.split('\n').map((line, li) => {
-                    if (line.startsWith('**') && line.endsWith('**')) {
-                      return <div key={li} style={{ fontWeight: 700, color: '#e2e8f0', marginTop: 8, marginBottom: 4 }}>{line.replace(/\*\*/g, '')}</div>
-                    }
-                    if (line.startsWith('•') || line.startsWith('-')) {
-                      return <div key={li} style={{ paddingLeft: 8, color: '#94a3b8' }}>{line}</div>
-                    }
-                    if (line.startsWith('```')) {
-                      return <div key={li} style={{ height: 2 }} />
-                    }
-                    if (line.startsWith('|') && line.endsWith('|')) {
-                      return <div key={li} style={{ color: '#64748b', fontSize: 9 }}>{line}</div>
-                    }
-                    if (line.startsWith('✅') || line.startsWith('⬜')) {
-                      return <div key={li} style={{ color: '#94a3b8' }}>{line}</div>
-                    }
-                    return <div key={li} style={{ marginTop: line.trim() === '' ? 4 : 0 }}>{line}</div>
-                  })}
+                  {m.role === 'assistant' ? (
+                    <span dangerouslySetInnerHTML={{ __html: m.content
+                      .replace(/<table>/g, '<div style="overflow-x:auto;margin:6px 0"><table style="border-collapse:collapse;width:100%;font-size:9px">')
+                      .replace(/<tr>/g, '<tr style="border-bottom:1px solid #1e293b">')
+                      .replace(/<td>/g, '<td style="padding:4px 6px;color:#94a3b8">')
+                      .replace(/<th>/g, '<th style="padding:4px 6px;color:#cbd5e1;font-weight:700;text-align:left">')
+                      .replace(/<code>/g, '<code style="background:#1e293b;padding:1px 4px;border-radius:3px;font-size:9px;color:#22c55e">')
+                      .replace(/<b>/g, '<b style="color:#e2e8f0">')
+                    }} />
+                  ) : (
+                    m.content.split('\n').map((line, li) => {
+                      return <div key={li} style={{ marginTop: line.trim() === '' ? 4 : 0 }}>{line}</div>
+                    })
+                  )}
                 </div>
               </div>
             ))}

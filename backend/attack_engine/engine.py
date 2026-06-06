@@ -7,6 +7,7 @@ from .attacks.container_escape import ContainerEscapePrivileged, SidecarInjectio
 from .attacks.secrets_access import SecretsExfiltration, ConfigMapExfiltration
 from .attacks.network_scan import InternalNetworkScan, KubeletAPIAbuse
 from .attacks.resource_hijack import ResourceHijacking
+from .attacks.dns_exfiltration import DNSExfiltration
 from .attacks.base import BaseAttack, AttackStatus
 
 
@@ -20,6 +21,7 @@ AVAILABLE_ATTACKS = {
     "network-scan-internal": InternalNetworkScan,
     "kubelet-api-abuse": KubeletAPIAbuse,
     "resource-hijacking": ResourceHijacking,
+    "dns-exfiltration": DNSExfiltration,
 }
 
 
