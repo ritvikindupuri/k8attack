@@ -4,3 +4,5 @@ websockets>=10.0
 kubernetes>=25.0.0
 pyyaml>=6.0.0
 httpx>=0.24.0
+anthropic>=0.30.0
+reportlab>=4.0.0

@@ -14,7 +14,6 @@ A pure CLI tool that deploys a real Kind cluster, executes 10 real-world Kuberne
 git clone https://github.com/ritvikindupuri/k8attack.git
 cd k8attack
 pip install -r backend/requirements.txt
-pip install anthropic reportlab
 python3 cli.py
 ```
 
@@ -83,7 +82,6 @@ brew install kind kubectl docker python@3.11
 git clone https://github.com/ritvikindupuri/k8attack.git
 cd k8attack
 pip3 install -r backend/requirements.txt
-pip3 install anthropic reportlab
 
 # Set API key (optional, for auto-remediation)
 export ANTHROPIC_API_KEY="sk-ant-..."
@@ -92,9 +90,15 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 ### Linux
 
 ```bash
-# Install prerequisites
+# Install dependencies
+sudo apt install python3-pip  # Debian/Ubuntu
+# or: sudo dnf install python3-pip  # Fedora
+
+# Install kind
 curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.32.0/kind-linux-amd64
 chmod +x ./kind && sudo mv ./kind /usr/local/bin/
+
+# Install kubectl
 curl -LO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
 chmod +x kubectl && sudo mv kubectl /usr/local/bin/
 
@@ -102,7 +106,6 @@ chmod +x kubectl && sudo mv kubectl /usr/local/bin/
 git clone https://github.com/ritvikindupuri/k8attack.git
 cd k8attack
 pip3 install -r backend/requirements.txt
-pip3 install anthropic reportlab
 
 # Set API key (optional)
 export ANTHROPIC_API_KEY="sk-ant-..."
@@ -115,7 +118,6 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 git clone https://github.com/ritvikindupuri/k8attack.git
 cd k8attack
 pip install -r backend/requirements.txt
-pip install anthropic reportlab
 $env:ANTHROPIC_API_KEY = "sk-ant-..."
 ```
 
@@ -170,8 +172,10 @@ Select option **14** to see nodes, pods, services, and resource capacity.
 ```
 k8attack/
 ├── cli.py                          # Interactive CLI menu + execution
+├── results/                        # Generated engagement results (JSON)
 ├── backend/
 │   ├── main.py                     # FastAPI app, REST endpoints, WebSocket
+│   ├── requirements.txt            # Python dependencies
 │   ├── attack_engine/
 │   │   ├── engine.py               # Attack lifecycle management
 │   │   ├── mitre.py                # MITRE ATT&CK tactic definitions
