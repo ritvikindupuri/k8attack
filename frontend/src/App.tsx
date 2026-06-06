@@ -209,7 +209,7 @@ export default function App() {
           />
         )}
         {activeTab === 'remediation' && (
-          <RemediationPanel events={events} fetchApi={fetchApi} />
+          <RemediationPanel events={events} fetchApi={fetchApi} send={send} remediationSessions={remediationSessions} />
         )}
       </main>
     </div>

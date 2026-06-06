@@ -146,6 +146,36 @@ class RemediationAgent:
         self.api_key = api_key
         self.sessions: Dict[str, RemediationSession] = {}
         self._client = None
+        self._pending_approvals: Dict[str, asyncio.Event] = {}
+
+    def signal_approval(self, session_id: str, step_index: int, approved: bool):
+        """Called from WebSocket handler when user approves/rejects a command."""
+        key = f"{session_id}:{step_index}"
+        event = self._pending_approvals.pop(key, None)
+        if event:
+            event.approved = approved
+            event.set()
+
+    async def _request_approval(self, session: RemediationSession, step_index: int, command: str) -> bool:
+        """Broadcast approval request and wait for user response with 60s timeout."""
+        await self._broadcast({
+            "type": "remediation_approval_required",
+            "session_id": session.session_id,
+            "step_index": step_index,
+            "command": command,
+        })
+
+        key = f"{session.session_id}:{step_index}"
+        event = asyncio.Event()
+        event.approved = False
+        self._pending_approvals[key] = event
+
+        try:
+            await asyncio.wait_for(event.wait(), timeout=60.0)
+            return event.approved
+        except asyncio.TimeoutError:
+            self._pending_approvals.pop(key, None)
+            return False
 
     @property
     def client(self):
@@ -234,21 +264,44 @@ class RemediationAgent:
                         thinking = tm.group(1).strip()
 
                 step = RemediationStep(thinking=thinking, command=cmd)
+                step_index = len(session.steps)
                 session.steps.append(step)
 
                 await self._broadcast({
                     "type": "remediation_command_found",
                     "session_id": session.session_id,
-                    "step_index": len(session.steps) - 1,
+                    "step_index": step_index,
                     "thinking": thinking,
                     "command": cmd,
                 })
 
-                asyncio.create_task(self._execute_command(session, step))
+                asyncio.create_task(self._execute_command_with_approval(session, step, step_index))
 
         summary_match = re.search(r'<summary>\s*\n?(.*?)\n?\s*</summary>', full_text, re.DOTALL)
         if summary_match and session.summary is None:
             session.summary = summary_match.group(1).strip()
+
+    async def _execute_command_with_approval(self, session: RemediationSession, step: RemediationStep, step_index: int):
+        approved = await self._request_approval(session, step_index, step.command)
+        if approved:
+            await self._broadcast({
+                "type": "remediation_command_approved",
+                "session_id": session.session_id,
+                "step_index": step_index,
+                "command": step.command,
+            })
+            await self._execute_command(session, step)
+        else:
+            step.command_output = "Command rejected by human operator"
+            step.command_success = False
+            await self._broadcast({
+                "type": "remediation_command_result",
+                "session_id": session.session_id,
+                "step_index": step_index,
+                "command": step.command,
+                "output": step.command_output,
+                "success": False,
+            })
 
     async def _execute_command(self, session: RemediationSession, step: RemediationStep):
         await self._broadcast({

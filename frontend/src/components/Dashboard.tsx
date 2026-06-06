@@ -249,7 +249,8 @@ export function Dashboard({
     }, 5000)
   }
 
-  const activeAttacks = attackHistory.filter(a => a?.status === 'running' || a?.status === 'pending')
+  const runningAttacks = attackHistory.filter(a => a?.status === 'running')
+  const pendingAttacks = attackHistory.filter(a => a?.status === 'pending')
   const completedAttacks = attackHistory.filter(a => a?.status === 'completed')
   const failedAttacks = attackHistory.filter(a => a?.status === 'failed')
   const criticalAlerts = detectionEvents.filter(e => e?.severity === 'critical').length
@@ -305,10 +306,10 @@ export function Dashboard({
         <div style={{ ...boxStyle, borderLeft: '3px solid #f97316', padding: '10px 14px' }}>
           <div style={labelStyle}>Attacks</div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>
-            {completedAttacks.length + failedAttacks.length}
+            {attackHistory.length}
           </div>
           <div style={{ fontSize: 10, color: '#475569' }}>
-            {activeAttacks.length} active · {failedAttacks.length} failed
+            {runningAttacks.length} running · {completedAttacks.length} completed · {failedAttacks.length} failed
           </div>
         </div>
         <div style={{ ...boxStyle, borderLeft: '3px solid #ef4444', padding: '10px 14px' }}>
@@ -335,7 +336,7 @@ export function Dashboard({
             MITRE ATT&CK Coverage
             <InfoTooltip label="MITRE" description="MITRE ATT&CK tactics covered by completed attacks. Click any box to open the MITRE page for that tactic. Boxes light up green once an attack for that tactic completes." />
           </div>
-          {mitre && attackHistory.length > 0 ? (
+          {mitre ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 6 }}>
               {Object.entries(mitre).map(([key, tactic]: [string, any]) => {
                 const completedHere = attackHistory.filter(
