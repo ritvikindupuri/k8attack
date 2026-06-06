@@ -372,7 +372,7 @@ export function Dashboard({
               })}
             </div>
           ) : (
-            <div style={{ color: '#475569', fontSize: 11, textAlign: 'center', padding: 16 }}>Run attacks to see MITRE coverage</div>
+            <div style={{ color: '#475569', fontSize: 11, textAlign: 'center', padding: 16 }}>Loading MITRE ATT&CK coverage...</div>
           )}
         </div>
 

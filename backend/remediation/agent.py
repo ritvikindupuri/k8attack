@@ -147,6 +147,8 @@ class RemediationAgent:
         self.sessions: Dict[str, RemediationSession] = {}
         self._client = None
         self._pending_approvals: Dict[str, asyncio.Event] = {}
+        self._pending_exec_count: Dict[str, int] = {}
+        self._session_done_events: Dict[str, asyncio.Event] = {}
 
     def signal_approval(self, session_id: str, step_index: int, approved: bool):
         """Called from WebSocket handler when user approves/rejects a command."""
@@ -230,7 +232,15 @@ class RemediationAgent:
                     # Check for completed tags
                     await self._process_stream_text(session, current_text, text)
 
-            # After stream completes, process any remaining incomplete state
+            # Wait for all pending command approvals to finish
+            sid = session.session_id
+            if self._pending_exec_count.get(sid, 0) > 0:
+                self._session_done_events[sid] = asyncio.Event()
+                try:
+                    await asyncio.wait_for(self._session_done_events[sid].wait(), timeout=300.0)
+                except asyncio.TimeoutError:
+                    pass
+
             await self._finalize_remediation(session, current_text)
 
         except Exception as e:
@@ -275,6 +285,8 @@ class RemediationAgent:
                     "command": cmd,
                 })
 
+                sid = session.session_id
+                self._pending_exec_count[sid] = self._pending_exec_count.get(sid, 0) + 1
                 asyncio.create_task(self._execute_command_with_approval(session, step, step_index))
 
         summary_match = re.search(r'<summary>\s*\n?(.*?)\n?\s*</summary>', full_text, re.DOTALL)
@@ -282,26 +294,32 @@ class RemediationAgent:
             session.summary = summary_match.group(1).strip()
 
     async def _execute_command_with_approval(self, session: RemediationSession, step: RemediationStep, step_index: int):
-        approved = await self._request_approval(session, step_index, step.command)
-        if approved:
-            await self._broadcast({
-                "type": "remediation_command_approved",
-                "session_id": session.session_id,
-                "step_index": step_index,
-                "command": step.command,
-            })
-            await self._execute_command(session, step)
-        else:
-            step.command_output = "Command rejected by human operator"
-            step.command_success = False
-            await self._broadcast({
-                "type": "remediation_command_result",
-                "session_id": session.session_id,
-                "step_index": step_index,
-                "command": step.command,
-                "output": step.command_output,
-                "success": False,
-            })
+        try:
+            approved = await self._request_approval(session, step_index, step.command)
+            if approved:
+                await self._broadcast({
+                    "type": "remediation_command_approved",
+                    "session_id": session.session_id,
+                    "step_index": step_index,
+                    "command": step.command,
+                })
+                await self._execute_command(session, step)
+            else:
+                step.command_output = "Command rejected by human operator"
+                step.command_success = False
+                await self._broadcast({
+                    "type": "remediation_command_result",
+                    "session_id": session.session_id,
+                    "step_index": step_index,
+                    "command": step.command,
+                    "output": step.command_output,
+                    "success": False,
+                })
+        finally:
+            sid = session.session_id
+            self._pending_exec_count[sid] = self._pending_exec_count.get(sid, 0) - 1
+            if self._pending_exec_count[sid] <= 0 and sid in self._session_done_events:
+                self._session_done_events[sid].set()
 
     async def _execute_command(self, session: RemediationSession, step: RemediationStep):
         await self._broadcast({
