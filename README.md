@@ -34,6 +34,35 @@ Select option **11** (Run All Attacks) to see the full workflow.
 
 ---
 
+## System Architecture
+
+<div align="center">
+  <img src="karma-architecture.svg" alt="KARMA System Architecture" width="100%"/>
+  <p><em>Figure 1: KARMA System Architecture — component layers and data flow</em></p>
+</div>
+
+### Data Flow
+
+1. **CLI → API** — The user selects an attack from the interactive menu. The CLI sends an HTTP request to the FastAPI backend on port 8000 and opens a WebSocket connection for live streaming.
+
+2. **API → Attack Engine** — The API routes the request to the Attack Engine, which instantiates the selected attack module and executes it against the Kind cluster via the Kubernetes Python client.
+
+3. **Attack Engine → Cluster** — The attack module creates, modifies, or deletes Kubernetes resources (pods, ClusterRoleBindings, service accounts) in the Kind cluster. Every command and its output is captured and broadcast over WebSocket.
+
+4. **Cluster → Detection Monitor** — The Detection Monitor watches the cluster in real-time using Kubernetes watch APIs. When a new resource matches an alert rule (privileged pod, hostPath mount, cluster-admin binding, etc.), it creates a detection event and broadcasts the alert.
+
+5. **Detection → Remediation Agent** — For attacks with high or critical severity, the API queues the incident to the Remediation Agent. Claude Sonnet 4 receives the incident details plus recent detection events.
+
+6. **Remediation Agent → Cluster** — The agent produces structured thinking blocks and kubectl commands. Each command is executed against the cluster, with output streamed back. The agent continues until a summary concludes the session.
+
+7. **Results → CLI + Report** — All attack and remediation data is stored in memory, returned to the CLI for display, and available for PDF report generation via `/api/report`.
+
+### Technical Documentation
+
+For complete technical details including attack module internals, detection rule logic, remediation agent prompts, API reference, MITRE coverage tables, and data models, see the **[Technical Documentation](docs/technical-documentation.md)**.
+
+---
+
 ## Interactive Menu
 
 | Option | Mode | Description |
@@ -165,12 +194,6 @@ Select option **13** to see a terminal-based summary including:
 ### Check cluster status
 
 Select option **14** to see nodes, pods, services, and resource capacity.
-
----
-
-## Architecture
-
-<img src="karma-architecture.svg" alt="KARMA System Architecture" width="100%"/>
 
 ---
 
