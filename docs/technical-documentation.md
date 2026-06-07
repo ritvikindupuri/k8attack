@@ -68,9 +68,9 @@ Data flows: CLI → API → Attack Engine → Cluster → Detection Monitor → 
 **MITRE Tactic:** Privilege Escalation (TA0004)
 **MITRE Techniques:** T1611 (Escape to Host), T1548.003 (Abuse Elevation Control Mechanism)
 
-Creates a pod (`hostpath-exploit`) in the `default` namespace that mounts the host filesystem at `/host` via a `hostPath` volume. The pod runs Alpine Linux and sleeps for 3600 seconds, giving the attacker shell access to the node's entire filesystem. Once the pod is running, it reads `/host/etc/shadow` to prove host-level access, demonstrates process discovery via `/host/proc`, and writes a marker file to `/host/tmp/karma-pwned` as evidence of node compromise.
+Creates a pod (`hostpath-exploit`) in the `default` namespace that mounts the host filesystem at `/host` via a `hostPath` volume. Once the pod is running, it reads `/host/etc/shadow` to prove host-level access, demonstrates process discovery via `/host/proc`, and writes a marker file to `/host/tmp/karma-pwned` as evidence of node compromise.
 
-**Pod manifest:** Alpine 3.19, `/bin/sh -c sleep 3600`, volume mount of `/` to `/host`.
+**Pod manifest:** `alpine:3.19`, command `sleep 3600`, volume mount of host `/` to `/host`, labels `app=exploit, attack=privilege-escalation`.
 
 ### 3.2 RBAC Privilege Escalation
 
@@ -92,6 +92,8 @@ Creates a service account (`malicious-admin`) in the `default` namespace, then b
 
 Deploys a privileged container (`container-escape-pod`) with `hostPID: true` and `hostNetwork: true`. These settings break container isolation by sharing the host's process namespace and network stack. The pod installs `nsenter` and uses it to execute commands on the host node namespace, creates a new user (`karma-pwned`), reads host processes, and accesses the host filesystem.
 
+**Pod manifest:** `alpine:3.19`, `privileged: true`, `hostPID: true`, `hostNetwork: true`, capabilities `SYS_ADMIN, SYS_PTRACE, SYS_CHROOT, DAC_OVERRIDE, NET_ADMIN, SYS_RAWIO`, cgroup hostPath volume at `/sys/fs/cgroup`, command `sleep 3600`, restart `Never`.
+
 ### 3.4 Sidecar Proxy Injection
 
 **File:** `backend/attack_engine/attacks/container_escape.py`
@@ -101,6 +103,9 @@ Deploys a privileged container (`container-escape-pod`) with `hostPID: true` and
 **MITRE Techniques:** T1613 (Access K8s API), T1021.006 (Kubernetes API lateral movement)
 
 Discovers target pods in the `default` namespace and attempts to inject a malicious sidecar container. Since Kubernetes pod specs are immutable after creation, the attack deploys a separate proxy pod (`traffic-proxy`) with `NET_ADMIN` and `NET_RAW` capabilities that monitors network traffic and captures `/proc/net/tcp` data. If no suitable pods exist, it first creates an nginx target deployment.
+
+**Pod manifest (proxy):** `alpine:3.19`, `hostNetwork: true`, capabilities `NET_ADMIN, NET_RAW`, command `tcpdump -i any -c 50 -nn; sleep 3600`.
+**Target deployment:** `nginx:1.25-alpine`, port 80, 1 replica, labels `app=target-app`.
 
 ### 3.5 Kubernetes Secrets Exfiltration
 
@@ -130,7 +135,9 @@ Enumerates all ConfigMaps across all namespaces using the Kubernetes Python API 
 **MITRE Tactic:** Discovery (TA0007)
 **MITRE Techniques:** T1046 (Network Service Scanning), T1613 (K8s API Discovery)
 
-Deploys a pod (`network-scanner`) that discovers the cluster's service CIDR and scans internal IP ranges for open ports and live services. Uses Alpine with `nmap`, `curl`, and `bash` to perform network probing across the Kubernetes service network (`10.96.0.0/12`). Identifies open ports on the Kubernetes API server, DNS service, and other internal endpoints.
+Deploys a pod (`network-scanner`) that discovers the cluster's service CIDR and scans internal IP ranges for open ports and live services. After deploying, it installs `nmap`, `ncat`, and `bind-tools` via `apk`, then probes services using `nc -zv` across the cluster IP range. Identifies open ports on the Kubernetes API server, DNS service, and other internal endpoints.
+
+**Pod manifest:** `alpine:3.19`, command `sleep 300`, restart `Never`. Tools installed post-deploy: `nmap`, `nmap-ncat`, `bind-tools`.
 
 ### 3.8 Kubelet API Abuse
 
@@ -140,7 +147,9 @@ Deploys a pod (`network-scanner`) that discovers the cluster's service CIDR and 
 **MITRE Tactic:** Privilege Escalation (TA0004)
 **MITRE Techniques:** T1611 (Escape to Host), T1609 (Container Administration Command)
 
-Deploys a pod (`kubelet-scanner`) with `hostNetwork: true` to bypass network policies. Discovers node internal IPs via the Kubernetes API, then probes each node's kubelet API ports (10250 with auth, 10255 without auth). Attempts to access pod lists and exec endpoints via the kubelet API, demonstrating node-level access without API server authentication.
+Deploys a pod (`kubelet-scanner`) with `hostNetwork: true` to bypass network policies. Discovers node internal IPs via the Kubernetes API, then probes each node's kubelet API ports (10250 with auth, 10255 without auth) using `curl`. Attempts to access pod lists and exec endpoints via the kubelet API, demonstrating node-level access without API server authentication.
+
+**Pod manifest:** `alpine:3.19`, `hostNetwork: true`, command `apk add --no-cache curl && sleep 300`, restart `Never`.
 
 ### 3.9 Cluster Resource Hijacking
 
@@ -150,7 +159,9 @@ Deploys a pod (`kubelet-scanner`) with `hostNetwork: true` to bypass network pol
 **MITRE Tactic:** Impact (TA0040)
 **MITRE Techniques:** T1496 (Resource Hijacking), T1499 (Endpoint Denial of Service)
 
-Deploys resource-intensive pods (`resource-hijacker-0` through `resource-hijacker-N`) across available nodes, where N is determined by the number of available nodes (`max(len(available_nodes) * 2, 2)`). Each pod runs stress-ng with CPU worker threads and memory allocation to simulate cryptominer-style resource exhaustion. The attack monitors node CPU/memory pressure and reports resource starvation conditions.
+Deploys resource-intensive pods (`resource-hijacker-0` through `resource-hijacker-N`) across available nodes, where N is determined by the number of available nodes (`max(len(available_nodes) * 2, 2)`). Each pod runs a CPU-intensive loop with `dd if=/dev/zero of=/dev/null` to simulate cryptominer-style resource exhaustion. The attack monitors node CPU/memory pressure and reports resource starvation conditions.
+
+**Pod manifest:** `alpine:3.19`, resource requests `cpu: 500m, memory: 256Mi`, limits `cpu: 1000m, memory: 512Mi`, command `dd if=/dev/zero of=/dev/null bs=1M count=100` in infinite loop, `nodeAffinity` to pin pods to specific nodes, restart `Always`.
 
 ### 3.10 DNS-Based Data Exfiltration
 
@@ -161,6 +172,8 @@ Deploys resource-intensive pods (`resource-hijacker-0` through `resource-hijacke
 **MITRE Techniques:** T1048 (Exfiltration Over Alternative Protocol), T1572 (Protocol Tunneling)
 
 Creates a pod (`dns-exfil-pod`) that encodes simulated stolen data (service account tokens, secret data) into DNS queries to a controlled domain (`exfil.attack-simulator.local`). Uses `nslookup` and `dig` to transmit base64-encoded payloads as DNS subdomains, bypassing HTTP/HTTPS monitoring. Demonstrates data exfiltration over DNS protocol tunneling.
+
+**Pod manifest:** `alpine:3.19`, command `sleep 3600`, restart `Never`. Tools used post-deploy: `bind-tools` (for `nslookup`/`dig`). Exfil domain: `exfil.attack-simulator.local`.
 
 ---
 
