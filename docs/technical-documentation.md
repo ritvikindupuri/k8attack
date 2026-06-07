@@ -65,6 +65,7 @@ Data flows: CLI → API → Attack Engine → Cluster → Detection Monitor → 
 ## 3. Attack Engine
 
 **File:** `backend/attack_engine/engine.py`
+**Base class:** `backend/attack_engine/attacks/base.py`
 
 The `AttackEngine` class manages attack lifecycle. It maintains an `AVAILABLE_ATTACKS` registry mapping string IDs (e.g. `"privilege-escalation-hostpath"`) to attack classes. When `run_attack()` is called, it generates a UUID `execution_id`, instantiates the attack class with the cluster manager and WebSocket manager, and spawns the execution in a background `asyncio.create_task`.
 
