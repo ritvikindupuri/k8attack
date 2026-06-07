@@ -154,11 +154,21 @@ python3 cli.py
 ### Windows (PowerShell)
 
 ```powershell
-# Install prerequisites (Docker Desktop, Python, kind via curl)
+# Install kind
+curl.exe -Lo kind-windows-amd64.exe https://kind.sigs.k8s.io/dl/v0.32.0/kind-windows-amd64
+Move-Item .\kind-windows-amd64.exe $env:USERPROFILE\kind.exe
+# Add kind to PATH (run as Administrator):
+# [Environment]::SetEnvironmentVariable("Path", "$env:USERPROFILE;" + [Environment]::GetEnvironmentVariable("Path", "User"), "User")
+
+# Install kubectl
+curl.exe -LO "https://dl.k8s.io/release/v1.30.0/bin/windows/amd64/kubectl.exe"
+Move-Item .\kubectl.exe $env:USERPROFILE\kubectl.exe
+
+# Clone and set up
 git clone https://github.com/ritvikindupuri/k8attack.git
 cd k8attack
 pip install -r backend/requirements.txt
-cp .env.example .env
+Copy-Item .env.example .env
 # Edit .env with your API key (only needed for option 12)
 
 # Launch
