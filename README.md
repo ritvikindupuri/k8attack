@@ -97,6 +97,13 @@ python3 cli.py
 
 Select option **11** (Run All Attacks) to see the full workflow — no API key needed.
 
+To generate a PDF report after running attacks, start the API server and download it:
+
+```bash
+python3 backend/main.py &
+curl -o report.pdf http://localhost:8000/api/report
+```
+
 ### macOS
 
 ```bash
