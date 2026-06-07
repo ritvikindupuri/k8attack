@@ -68,9 +68,9 @@ For complete technical details including attack module internals, detection rule
 
 | Option | Mode | Description |
 |--------|------|-------------|
-| 1–10 | Single Attack | Run one specific attack module |
-| 11 | Run All Attacks | Execute all 10 attacks sequentially |
-| 12 | Full Engagement | All attacks + auto-remediation (only option that requires `ANTHROPIC_API_KEY`) |
+| 1–10 | Single Attack | Run one specific attack module (auto-creates cluster if needed) |
+| 11 | Run All Attacks | Execute all 10 attacks sequentially (auto-creates cluster if needed) |
+| 12 | Full Engagement | All attacks + auto-remediation (auto-creates cluster; only option requiring `ANTHROPIC_API_KEY`) |
 | 13 | View Results | Display latest engagement results with MITRE grid |
 | 14 | Cluster Status | Live cluster info (nodes, pods, namespaces) |
 

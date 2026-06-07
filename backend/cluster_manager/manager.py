@@ -440,4 +440,9 @@ class ClusterManager:
         return _new_apps_api()
 
     def is_ready(self):
+        if not self._ready:
+            try:
+                self._init_k8s_client()
+            except Exception:
+                pass
         return self._ready
