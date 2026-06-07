@@ -99,6 +99,13 @@ For complete technical details including attack module internals, detection rule
 - Python 3.11+
 - Anthropic API key (only for Full Engagement — optional; options 1–11, 13–14 work without it)
 
+### Quickstart (macOS & Linux)
+
+```bash
+bash scripts/setup.sh      # installs kind, kubectl, pip deps, sets up .env
+python3 cli.py              # launch the CLI
+```
+
 ### macOS
 
 ```bash
@@ -114,6 +121,9 @@ cp .env.example .env
 
 # Edit .env with your API key (only needed for option 12)
 # Options 1–11, 13–14 work without it
+
+# Launch
+python3 cli.py
 ```
 
 ### Linux
@@ -138,6 +148,9 @@ pip3 install -r backend/requirements.txt
 cp .env.example .env
 
 # Edit .env with your API key (only needed for option 12)
+
+# Launch
+python3 cli.py
 ```
 
 ### Windows (PowerShell)
@@ -149,6 +162,9 @@ cd k8attack
 pip install -r backend/requirements.txt
 cp .env.example .env
 # Edit .env with your API key (only needed for option 12)
+
+# Launch
+python3 cli.py
 ```
 
 ---
