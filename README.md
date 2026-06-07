@@ -44,7 +44,7 @@ Select option **11** (Run All Attacks) to see the full workflow — no API key n
 
 ### Data Flow
 
-1. **CLI → API** — The user selects an attack from the interactive menu. The CLI sends an HTTP request to the FastAPI backend on port 8000 and opens a WebSocket connection for live streaming.
+1. **CLI → Attack Engine** — The user selects an attack from the interactive menu. The CLI imports backend components directly in-process (no HTTP needed for local operation) and streams live agent output to the terminal.
 
 2. **API → Attack Engine** — The API routes the request to the Attack Engine, which instantiates the selected attack module and executes it against the Kind cluster via the Kubernetes Python client.
 

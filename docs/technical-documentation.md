@@ -46,9 +46,9 @@ The platform covers 8 MITRE ATT&CK tactics across 10 attack scenarios, 7 detecti
 
 KARMA follows a layered architecture with five main components:
 
-**CLI Layer** (`cli.py`) — Interactive terminal menu with ANSI-themed branding. Manages user input, orchestrates attack/remediation workflows, and streams live agent output. Connects to the backend via HTTP REST calls and WebSocket for real-time events.
+**CLI Layer** (`cli.py`) — Interactive terminal menu with ANSI-themed branding. Manages user input, orchestrates attack/remediation workflows, and streams live agent output. Imports backend components directly in-process and uses a mock WebSocket (`LiveWS`) for local real-time display — no HTTP calls needed for local operation.
 
-**API Layer** (`backend/main.py`) — FastAPI server on port 8000. Routes all CLI requests to the appropriate engine, manages WebSocket connections for live streaming, and hosts the remediation worker loop that queues incidents for Claude.
+**API Layer** (`backend/main.py`) — FastAPI server on port 8000. Provides REST endpoints and WebSocket connections for live streaming, and hosts the remediation worker loop that queues incidents for Claude. The CLI runs standalone and imports components in-process, but the API layer can also drive the same attacks independently.
 
 **Attack Engine** (`backend/attack_engine/`) — Orchestrates 10 attack modules. Each module extends `BaseAttack` and uses the Kubernetes Python client to create/delete resources. The engine tracks status, events, and affected infrastructure per attack.
 
@@ -58,7 +58,7 @@ KARMA follows a layered architecture with five main components:
 
 **Cluster Layer** (`backend/cluster_manager/`) — Kind-based 3-node cluster named `k8s-attack-lab` (1 control-plane, 2 workers) with intentionally vulnerable configurations (pod security policies, RBAC bindings, default service account permissions). Uses `CLUSTER_NAME = "k8s-attack-lab"` (manager.py:40).
 
-Data flows: CLI → API → Attack Engine → Cluster → Detection Monitor → (if high/critical) Remediation Agent → Cluster → Results → CLI display + PDF report.
+Data flows: CLI → Attack Engine → Cluster → Detection Monitor → (if high/critical) Remediation Agent → Cluster → Results → CLI display + PDF report.
 
 ---
 
@@ -90,7 +90,7 @@ The `AttackOrchestrator` runs all 10 attacks sequentially via `run_all_attacks()
 **MITRE Tactic:** Privilege Escalation (TA0004)
 **MITRE Techniques:** T1611 (Escape to Host), T1548.003 (Abuse Elevation Control Mechanism)
 
-Creates a pod (`hostpath-exploit`) in the `default` namespace that mounts the host filesystem at `/host` via a `hostPath` volume. Once the pod is running, it reads `/host/etc/shadow` to prove host-level access, demonstrates process discovery via `/host/proc`, and writes a marker file to `/host/tmp/karma-pwned` as evidence of node compromise.
+Creates a pod (`hostpath-exploit`) in the `default` namespace that mounts the host filesystem at `/host` via a `hostPath` volume. Once the pod is running, it reads `/host/etc/shadow` to prove host-level access and extracts the shadow file contents as evidence of node compromise.
 
 **Pod manifest:** `alpine:3.19`, container `exploit-container`, command `sleep 3600`, labels `app=exploit, attack=privilege-escalation`. **securityContext:** `privileged: true`, capabilities `SYS_ADMIN, DAC_OVERRIDE`. **hostNetwork:** not set (false). **hostPID:** not set (false). **Volumes:** `hostPath` type `Directory` mapping host `/` to `/host`. **Resource limits:** not set (unrestricted). **Restart policy:** `Never`.
 
@@ -112,7 +112,7 @@ Creates a service account (`malicious-admin`) in the `default` namespace, then b
 **MITRE Tactic:** Privilege Escalation (TA0004)
 **MITRE Techniques:** T1611 (Container Escape), T1548.003 (Abuse Elevation Control Mechanism)
 
-Deploys a privileged container (`container-escape-pod`) with `hostPID: true` and `hostNetwork: true`. These settings break container isolation by sharing the host's process namespace and network stack. The pod installs `nsenter` and uses it to execute commands on the host node namespace, creates a new user (`karma-pwned`), reads host processes, and accesses the host filesystem.
+Deploys a privileged container (`container-escape-pod`) with `hostPID: true` and `hostNetwork: true`. These settings break container isolation by sharing the host's process namespace and network stack. The pod uses `nsenter` to execute host-namespace commands (hostname read), attempts `chroot` escape, queries host iptables rules, and reads host filesystem via `/proc/1/root`.
 
 **Pod manifest:** `alpine:3.19`, container `escape-container`, `privileged: true`, `hostPID: true`, `hostNetwork: true`, capabilities `SYS_ADMIN, SYS_PTRACE, SYS_CHROOT, DAC_OVERRIDE, NET_ADMIN, SYS_RAWIO`. **Volumes:** `hostPath` type `Directory` mapping `/sys/fs/cgroup`. **Command:** `sleep 3600`. **Resource limits:** not set (unrestricted). **Restart policy:** `Never`. Labels `app=escape, attack=container-escape`.
 
@@ -124,7 +124,7 @@ Deploys a privileged container (`container-escape-pod`) with `hostPID: true` and
 **MITRE Tactic:** Collection (TA0009)
 **MITRE Techniques:** T1613 (Access K8s API), T1021.006 (Kubernetes API lateral movement)
 
-Discovers target pods in the `default` namespace and attempts to inject a malicious sidecar container. Since Kubernetes pod specs are immutable after creation, the attack deploys a separate proxy pod (`traffic-proxy`) with `NET_ADMIN` and `NET_RAW` capabilities that monitors network traffic and captures `/proc/net/tcp` data. If no suitable pods exist, it first creates an nginx target deployment.
+Discovers target pods in the `default` namespace and attempts to inject a malicious sidecar container. Since Kubernetes pod specs are immutable after creation, the attack deploys a separate proxy pod (`traffic-proxy`) with `NET_ADMIN` and `NET_RAW` capabilities that captures network traffic via `tcpdump`. If no suitable pods exist, it first creates an nginx target deployment.
 
 **Pod manifest (proxy):** `alpine:3.19`, container `proxy`, `hostNetwork: true`, **securityContext:** capabilities `NET_ADMIN, NET_RAW` (not privileged), command `apk add tcpdump; tcpdump -i any -c 50 -nn; sleep 3600`. **hostPID:** not set (false). **Volumes:** none. **Resource limits:** not set (unrestricted). **Restart policy:** not set (defaults to `Always`). Labels `app=proxy, attack=sidecar`.
 **Target deployment:** `nginx:1.25-alpine`, port 80, 1 replica, labels `app=target-app`. No securityContext, no resource limits, no hostNetwork, no volumes.
@@ -137,7 +137,7 @@ Discovers target pods in the `default` namespace and attempts to inject a malici
 **MITRE Tactic:** Credential Access (TA0006)
 **MITRE Techniques:** T1552.007 (Container Secrets), T1613 (Access K8s API)
 
-Enumerates all secrets across all namespaces using the Kubernetes Python API directly (`api.list_namespaced_secret`). No pod is created — the attack runs in-process. Gets the default service account token via file read (`/var/run/secrets/kubernetes.io/serviceaccount/token`), discovers API server endpoint from environment variables (`KUBERNETES_SERVICE_HOST`, `KUBERNETES_PORT_443_TCP_PORT`), and queries the API for secrets across every namespace. Found secrets are base64-decoded and logged.
+Enumerates all secrets across all namespaces using the Kubernetes Python API directly (`api.list_namespaced_secret`). No pod is created — the attack runs in-process. Uses the Python client's built-in authentication (kubeconfig or in-cluster config) to query the API for secrets across every namespace. Found secrets are base64-decoded and logged.
 
 ### 4.6 ConfigMap Data Collection
 
@@ -181,7 +181,7 @@ Deploys a pod (`kubelet-scanner`) with `hostNetwork: true` to bypass network pol
 **MITRE Tactic:** Impact (TA0040)
 **MITRE Techniques:** T1496 (Resource Hijacking), T1499 (Endpoint Denial of Service)
 
-Deploys resource-intensive pods (`resource-hijacker-0` through `resource-hijacker-N`) across available nodes, where N is determined by the number of available nodes (`max(len(available_nodes) * 2, 2)`). Each pod runs a CPU-intensive loop with `dd if=/dev/zero of=/dev/null` to simulate cryptominer-style resource exhaustion. The attack monitors node CPU/memory pressure and reports resource starvation conditions.
+Deploys resource-intensive pods (`resource-hijacker-0` through `resource-hijacker-N`) across available nodes, where N is determined by the number of available nodes (`max(len(available_nodes) * 2, 2)`). Each pod runs a CPU-intensive loop with `dd if=/dev/zero of=/dev/null` to simulate cryptominer-style resource exhaustion. The attack reports the total deployed compute load but does not actively re-check node conditions after deployment.
 
 **Pod manifest:** `alpine:3.19`, container `loader`, command `dd if=/dev/zero of=/dev/null bs=1M count=100` in infinite loop. **Resource requests:** `cpu: 500m, memory: 256Mi`. **Resource limits:** `cpu: 1000m, memory: 512Mi`. **securityContext:** not set (defaults to unprivileged). **hostNetwork:** not set (false). **hostPID:** not set (false). **Capabilities:** not set (default). **Volumes:** none. **Restart policy:** `Always`. `nodeAffinity` pins each pod to a specific node. Labels `app=resource-hijacker, attack=resource-hijack`. Pod count = `max(len(available_nodes) * 2, 2)`.
 
@@ -193,9 +193,9 @@ Deploys resource-intensive pods (`resource-hijacker-0` through `resource-hijacke
 **MITRE Tactic:** Collection (TA0009)
 **MITRE Techniques:** T1048 (Exfiltration Over Alternative Protocol), T1572 (Protocol Tunneling)
 
-Creates a pod (`dns-exfil-pod`) that encodes simulated stolen data (service account tokens, secret data) into DNS queries to a controlled domain (`exfil.attack-simulator.local`). Uses `nslookup` and `dig` to transmit base64-encoded payloads as DNS subdomains, bypassing HTTP/HTTPS monitoring. Demonstrates data exfiltration over DNS protocol tunneling.
+Creates a pod (`dns-exfil-pod`) that encodes simulated stolen data (service account tokens, secret data) into DNS queries to a controlled domain (`c2-dns.exfil.com`). Uses `nslookup` and `dig` to transmit base64-encoded payloads as DNS subdomains, bypassing HTTP/HTTPS monitoring. Demonstrates data exfiltration over DNS protocol tunneling.
 
-**Pod manifest:** `alpine:3.19`, container `exfil-container`, command `sleep 3600`. **securityContext:** not set (defaults to unprivileged). **hostNetwork:** not set (false). **hostPID:** not set (false). **Capabilities:** not set (default). **Volumes:** none. **Resource limits:** not set (unrestricted). **Restart policy:** `Never`. Labels `app=exfil, attack=dns-exfiltration`. Tools installed post-deploy: `bind-tools` (for `nslookup`/`dig`) via `apk`. Exfil domain: `exfil.attack-simulator.local`.
+**Pod manifest:** `alpine:3.19`, container `exfil-container`, command `sleep 3600`. **securityContext:** not set (defaults to unprivileged). **hostNetwork:** not set (false). **hostPID:** not set (false). **Capabilities:** not set (default). **Volumes:** none. **Resource limits:** not set (unrestricted). **Restart policy:** `Never`. Labels `app=exfil, attack=dns-exfiltration`. Exfil domain: `c2-dns.exfil.com`.
 
 ---
 
@@ -276,21 +276,21 @@ The CLI is the primary user interface. It connects to backend components directl
 - `C` class — Defines ANSI color constants (cyan, green, yellow, red, blue, magenta, white, dim, bold). Falls back to empty strings when stdout is not a TTY.
 - `section()`, `box()`, `box_end()` — Draw bordered section headers and info boxes.
 - `cmd_block()` — Renders a kubectl command in a cyan-bordered box with `$` prefix.
-- `output_block()` — Renders command output in a green-bordered box (truncated to 25 lines).
+ - `output_block()` — Renders command output in a green-bordered box with line wrapping to fit terminal width.
 - `thinking_block()` — Renders agent reasoning in a yellow-bordered box.
 - `ok()`, `fail()`, `warn()`, `info()` — Status icons (✔, ✘, ⚠, ℹ) with color.
 
-### LiveWS Class (line 190)
+### LiveWS Class (line 205)
 A mock WebSocket manager that prints events directly to the terminal in real-time. Implements the same interface as the real `WebSocketManager` but renders formatted output instead of sending over the wire. Handles event types: `attack_event` (cmd/info/start/complete/error), `detection_alert`, `remediation_started`, `remediation_command_found`, `remediation_command_result`, `remediation_completed`, `remediation_failed`.
 
-### Attack Registry (line 72)
-A list of 10 attack tuples mapping string IDs to attack classes and severity labels. Used by the menu system and command execution.
+### Attack Registry (line 83)
+`ATTACKS` — A list of 10 tuples mapping string IDs to attack classes and severity labels. Used by the menu system and command execution.
 
-### Menu System (line 521)
+### Menu System (line 535)
 `show_menu()` renders an interactive terminal menu with 14 options grouped into Attack Modules (1–10), Campaigns (11–12), Intelligence (13–14), and Exit (0). Input is read via `input()` and routed in the `main_async()` event loop.
 
 ### Execution Flow
-1. `ensure_ready()` — Checks prerequisites, creates/reuses Kind cluster, starts detection monitor, optionally initializes remediation agent.
+1. `ensure_ready()` — Checks prerequisites, creates/reuses Kind cluster, labels default namespace with `pod-security.kubernetes.io/enforce=privileged`, starts detection monitor, optionally initializes remediation agent.
 2. `run_attack_instance()` — Creates attack instance, displays header with name/severity/MITRE, executes via `asyncio.to_thread`, builds structured step list from raw events.
 3. `run_remediation()` — Calls `remediation_agent.trigger_remediation()`, polls until completion, builds structured step list.
 4. `save_results()` — Compiles all attack results, alerts, remediation sessions, MITRE coverage into a JSON file saved to `results/findings_{timestamp}.json`.
@@ -366,7 +366,7 @@ Generates professional PDF security assessment reports using ReportLab. The repo
 - MITRE ATT&CK coverage grid
 - Remediation summary (if applicable)
 - Cluster configuration details
-- Footer with page numbers and classification marking
+- Footer with page numbers
 
 Color-coded severity indicators: critical (red), high (orange), medium (amber), low (yellow).
 

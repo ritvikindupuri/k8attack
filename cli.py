@@ -32,7 +32,7 @@ if os.path.isfile(env_path):
             if line and not line.startswith("#") and "=" in line:
                 k, _, v = line.partition("=")
                 k, v = k.strip(), v.strip().strip("\"'")
-                os.environ.setdefault(k, v)
+                os.environ[k] = v
 
 from cluster_manager.manager import ClusterManager, CLUSTER_NAME
 from attack_engine.mitre import MITRE_ATTACK
@@ -349,7 +349,7 @@ async def run_attack_instance(idx, total, aid, aclass, cm, loop, ws):
 async def run_remediation(ra, incident, dm):
     sid = await ra.trigger_remediation({
         "type": "attack_completed",
-        "name": incident.get("name", ""),
+        "name": incident.get("agent_name", incident.get("name", "")),
         "severity": incident.get("severity", ""),
         "description": incident.get("description", ""),
         "infrastructure": incident.get("infrastructure", []),
