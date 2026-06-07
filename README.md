@@ -213,15 +213,19 @@ Remediation agents appear as nodes in the execution workflow alongside attack ag
 
 ## API
 
-The FastAPI backend runs on port 8000 and provides:
+The FastAPI backend runs on port 8000 and provides 28 endpoints:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/health` | GET | Health check |
+| `/api/prerequisites` | GET | Check prerequisite tools |
 | `/api/cluster/info` | GET | Cluster info (nodes, pods) |
 | `/api/cluster/create` | POST | Create Kind cluster |
+| `/api/cluster/create-and-attack` | POST | Create cluster and run attack |
 | `/api/cluster/delete` | POST | Delete Kind cluster |
+| `/api/cluster/setup-scenarios` | POST | Deploy vulnerable scenarios |
 | `/api/attacks` | GET | List available attacks |
+| `/api/attacks/mitre` | GET | MITRE ATT&CK mapping |
 | `/api/attacks/run/{id}` | POST | Run specific attack |
 | `/api/attacks/run-all` | POST | Run all attacks |
 | `/api/attacks/history` | GET | Attack history |
@@ -234,6 +238,8 @@ The FastAPI backend runs on port 8000 and provides:
 | `/api/report` | GET | Download PDF report |
 | `/api/chat` | POST | AI security chat |
 | `/ws` | WebSocket | Real-time event stream |
+
+See the **[Technical Documentation](docs/technical-documentation.md#6-api-reference)** for the complete list of all 28 endpoints.
 
 Start the API server:
 

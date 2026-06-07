@@ -34,7 +34,7 @@ Version 1.0.0
 
 KARMA is a pure CLI-based Kubernetes security platform that deploys a real Kind cluster, executes 10 real-world attack techniques mapped to MITRE ATT&CK for Containers, and autonomously remediates them using Claude Sonnet 4. Every agent displays its full chain-of-thought reasoning alongside every command and its exact output, providing complete transparency into the security assessment workflow.
 
-The platform covers 8 MITRE ATT&CK tactics across 10 attack scenarios, 7 detection alert rules, and 15 API endpoints. Attacks range from container escape and privilege escalation to DNS-based data exfiltration and resource hijacking.
+The platform covers 8 MITRE ATT&CK tactics across 10 attack scenarios, 7 detection alert rules, and 28 API endpoints. Attacks range from container escape and privilege escalation to DNS-based data exfiltration and resource hijacking.
 
 ---
 
@@ -52,7 +52,7 @@ KARMA follows a layered architecture with five main components:
   - `backend/detection/monitor.py`: Kubernetes watch-based monitor that detects privileged pods, hostPath mounts, cluster-admin bindings, secret access, API discovery, host network, and host PID events across 7 alert rules.
   - `backend/remediation/agent.py`: Claude Sonnet 4 agent that receives incident data, generates structured chain-of-thought remediation plans, and executes kubectl commands autonomously.
 
-**Cluster Layer** (`backend/cluster_manager/`) — Kind-based 3-node cluster (1 control-plane, 2 workers) with intentionally vulnerable configurations (pod security policies, RBAC bindings, default service account permissions).
+**Cluster Layer** (`backend/cluster_manager/`) — Kind-based 3-node cluster named `k8s-attack-lab` (1 control-plane, 2 workers) with intentionally vulnerable configurations (pod security policies, RBAC bindings, default service account permissions). Uses `CLUSTER_NAME = "k8s-attack-lab"` (manager.py:40).
 
 Data flows: CLI → API → Attack Engine → Cluster → Detection Monitor → (if high/critical) Remediation Agent → Cluster → Results → CLI display + PDF report.
 
@@ -78,9 +78,9 @@ Creates a pod (`hostpath-exploit`) in the `default` namespace that mounts the ho
 
 **Severity:** Critical
 **MITRE Tactic:** Privilege Escalation (TA0004)
-**MITRE Techniques:** T1548.003 (Abuse Elevation Control Mechanism), T1613 (Access K8s API)
+**MITRE Techniques:** T1611 (Escape to Host), T1548.003 (Abuse Elevation Control Mechanism)
 
-Creates a service account (`rbac-escalator-sa`) in the `default` namespace, then binds it to the `cluster-admin` ClusterRole via a ClusterRoleBinding (`rbac-escalator-binding`). This grants the service account full admin privileges across all namespaces. A pod (`rbac-escalator`) is deployed using this service account and uses `kubectl` to list pods across all namespaces, demonstrating cluster-wide access.
+Creates a service account (`malicious-admin`) in the `default` namespace, then binds it to the `cluster-admin` ClusterRole via a ClusterRoleBinding (`malicious-admin-binding`). Uses the Kubernetes Python API client directly to create the SA and binding — no pod is deployed. The binding grants the service account full admin privileges across all namespaces.
 
 ### 3.3 Container Escape via Privileged Mode
 
@@ -100,7 +100,7 @@ Deploys a privileged container (`container-escape-pod`) with `hostPID: true` and
 **MITRE Tactic:** Collection (TA0009)
 **MITRE Techniques:** T1613 (Access K8s API), T1021.006 (Kubernetes API lateral movement)
 
-Discovers target pods in the `default` namespace and attempts to inject a malicious sidecar container. Since Kubernetes pod specs are immutable after creation, the attack deploys a separate proxy pod (`sidecar-proxy`) with `NET_ADMIN` and `NET_RAW` capabilities that monitors network traffic and captures `/proc/net/tcp` data. If no suitable pods exist, it first creates an nginx target deployment.
+Discovers target pods in the `default` namespace and attempts to inject a malicious sidecar container. Since Kubernetes pod specs are immutable after creation, the attack deploys a separate proxy pod (`traffic-proxy`) with `NET_ADMIN` and `NET_RAW` capabilities that monitors network traffic and captures `/proc/net/tcp` data. If no suitable pods exist, it first creates an nginx target deployment.
 
 ### 3.5 Kubernetes Secrets Exfiltration
 
@@ -110,7 +110,7 @@ Discovers target pods in the `default` namespace and attempts to inject a malici
 **MITRE Tactic:** Credential Access (TA0006)
 **MITRE Techniques:** T1552.007 (Container Secrets), T1613 (Access K8s API)
 
-Enumerates all secrets across all namespaces using the Kubernetes API. Gets the default service account token via file read (`/var/run/secrets/kubernetes.io/serviceaccount/token`), discovers API server endpoint from environment variables (`KUBERNETES_SERVICE_HOST`, `KUBERNETES_PORT_443_TCP_PORT`), and queries the API for secrets. Creates a pod (`secret-enumerator`) to perform the enumeration and exfiltrates found secrets.
+Enumerates all secrets across all namespaces using the Kubernetes Python API directly (`api.list_namespaced_secret`). No pod is created — the attack runs in-process. Gets the default service account token via file read (`/var/run/secrets/kubernetes.io/serviceaccount/token`), discovers API server endpoint from environment variables (`KUBERNETES_SERVICE_HOST`, `KUBERNETES_PORT_443_TCP_PORT`), and queries the API for secrets across every namespace. Found secrets are base64-decoded and logged.
 
 ### 3.6 ConfigMap Data Collection
 
@@ -118,9 +118,9 @@ Enumerates all secrets across all namespaces using the Kubernetes API. Gets the 
 
 **Severity:** Medium
 **MITRE Tactic:** Collection (TA0009)
-**MITRE Techniques:** T1113 (Screen Capture), T1057 (Process Discovery)
+**MITRE Techniques:** T1113 (Screen Capture / Data from ConfigMap), T1613 (Access K8s API)
 
-Creates a pod (`configmap-enumerator`) that lists all ConfigMaps across all namespaces, extracts their data fields, and collects environment variables from running pods. The extracted data is logged and reported as collected intelligence.
+Enumerates all ConfigMaps across all namespaces using the Kubernetes Python API directly (`api.list_namespaced_config_map`). No pod is created — the attack runs in-process. Extracts data fields from every ConfigMap found, logs key-value previews, and reports the collected configuration data as intelligence.
 
 ### 3.7 Internal Cluster Network Scan
 
@@ -130,7 +130,7 @@ Creates a pod (`configmap-enumerator`) that lists all ConfigMaps across all name
 **MITRE Tactic:** Discovery (TA0007)
 **MITRE Techniques:** T1046 (Network Service Scanning), T1613 (K8s API Discovery)
 
-Deploys a pod (`cluster-scanner`) that discovers the cluster's service CIDR and scans internal IP ranges for open ports and live services. Uses Alpine with `nmap`, `curl`, and `bash` to perform network probing across the Kubernetes service network (`10.96.0.0/12`). Identifies open ports on the Kubernetes API server, DNS service, and other internal endpoints.
+Deploys a pod (`network-scanner`) that discovers the cluster's service CIDR and scans internal IP ranges for open ports and live services. Uses Alpine with `nmap`, `curl`, and `bash` to perform network probing across the Kubernetes service network (`10.96.0.0/12`). Identifies open ports on the Kubernetes API server, DNS service, and other internal endpoints.
 
 ### 3.8 Kubelet API Abuse
 
@@ -150,7 +150,7 @@ Deploys a pod (`kubelet-scanner`) with `hostNetwork: true` to bypass network pol
 **MITRE Tactic:** Impact (TA0040)
 **MITRE Techniques:** T1496 (Resource Hijacking), T1499 (Endpoint Denial of Service)
 
-Deploys 3 resource-intensive pods (`resource-hog-1` through `resource-hog-3`) across available nodes. Each pod runs stress-ng with CPU worker threads and memory allocation to simulate cryptominer-style resource exhaustion. The attack monitors node CPU/memory pressure and reports resource starvation conditions.
+Deploys resource-intensive pods (`resource-hijacker-0` through `resource-hijacker-N`) across available nodes, where N is determined by the number of available nodes (`max(len(available_nodes) * 2, 2)`). Each pod runs stress-ng with CPU worker threads and memory allocation to simulate cryptominer-style resource exhaustion. The attack monitors node CPU/memory pressure and reports resource starvation conditions.
 
 ### 3.10 DNS-Based Data Exfiltration
 
@@ -160,7 +160,7 @@ Deploys 3 resource-intensive pods (`resource-hog-1` through `resource-hog-3`) ac
 **MITRE Tactic:** Collection (TA0009)
 **MITRE Techniques:** T1048 (Exfiltration Over Alternative Protocol), T1572 (Protocol Tunneling)
 
-Creates a pod (`dns-exfiltrator`) that encodes simulated stolen data (service account tokens, secret data) into DNS queries to a controlled domain (`exfil.attack-simulator.local`). Uses `nslookup` and `dig` to transmit base64-encoded payloads as DNS subdomains, bypassing HTTP/HTTPS monitoring. Demonstrates data exfiltration over DNS protocol tunneling.
+Creates a pod (`dns-exfil-pod`) that encodes simulated stolen data (service account tokens, secret data) into DNS queries to a controlled domain (`exfil.attack-simulator.local`). Uses `nslookup` and `dig` to transmit base64-encoded payloads as DNS subdomains, bypassing HTTP/HTTPS monitoring. Demonstrates data exfiltration over DNS protocol tunneling.
 
 ---
 
@@ -175,15 +175,15 @@ The detection monitor uses Kubernetes watch APIs (`watch.Watch()`) to monitor po
 
 ### Alert Rules (7)
 
-| ID | Name | Severity | MITRE Tactic | Detection Logic |
-|----|------|----------|-------------|----------------|
-| `privileged-pod-creation` | Privileged Pod Created | Critical | Privilege Escalation | Pod with `securityContext.privileged: true` |
-| `hostpath-mount` | HostPath Volume Mount | High | Privilege Escalation | Pod with `hostPath` volume type |
-| `cluster-admin-binding` | Cluster Admin Role Binding | Critical | Privilege Escalation | New `cluster-admin` ClusterRoleBinding |
-| `secret-access` | Secrets Access | High | Credential Access | Pod accessing multiple secrets in short time |
-| `api-discovery` | API Resource Discovery | Medium | Discovery | Multiple API resource enumerations |
-| `host-network` | Host Network Pod | High | Defense Evasion | Pod with `hostNetwork: true` |
-| `host-pid` | Host PID Namespace | High | Privilege Escalation | Pod with `hostPID: true` |
+| ID | Name | Severity | MITRE Tactic | MITRE Technique | Detection Logic |
+|----|------|----------|-------------|----------------|----------------|
+| `privileged-pod-creation` | Privileged Pod Created | Critical | Privilege Escalation | T1611 | Pod with `securityContext.privileged: true` |
+| `hostpath-mount` | HostPath Volume Mount Detected | High | Privilege Escalation | T1611 | Pod with `hostPath` volume type |
+| `cluster-admin-binding` | Cluster Admin Role Binding | Critical | Privilege Escalation | T1548.003 | New `cluster-admin` ClusterRoleBinding |
+| `secret-access` | Secrets Access Detected | High | Credential Access | T1552.007 | Pod accessing multiple secrets in short time |
+| `api-discovery` | API Resource Discovery | Medium | Discovery | T1613 | Multiple API resource enumerations |
+| `host-network` | Host Network Pod | High | Defense Evasion | T1612 | Pod with `hostNetwork: true` |
+| `host-pid` | Host PID Namespace | High | Privilege Escalation | T1611 | Pod with `hostPID: true` |
 
 Events are broadcast via WebSocket to connected clients and stored in `detection_events` for retrieval via `/api/detection/events`.
 
@@ -208,7 +208,7 @@ Claude Sonnet 4 (`claude-sonnet-4-20250514`) via Anthropic API
 ### Prompt Keys
 - Structured XML tags: `<thinking>`, `<command>`, `<summary>`
 - Thinking requires: situation assessment, risk analysis, remediation strategy, command justification, verification plan
-- Commands restricted to: `kubectl delete`, `kubectl label`, `kubectl annotate`, `kubectl rollout restart`
+- Command patterns allowed: `kubectl delete pod`, `kubectl delete deployment`, `kubectl delete clusterrolebinding`, `kubectl delete rolebinding`, `kubectl delete role`, `kubectl delete serviceaccount`, `kubectl delete configmap`, `kubectl delete secret`, `kubectl label`, `kubectl annotate`, `kubectl rollout restart`
 - Final summary: actions taken, current state, verification, recommendations
 
 ---
@@ -219,19 +219,30 @@ Claude Sonnet 4 (`claude-sonnet-4-20250514`) via Anthropic API
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/` | GET | Root HTML page |
 | `/api/health` | GET | Health check returning status and uptime |
+| `/api/prerequisites` | GET | Check if prerequisites (kubectl, kind, Docker) are installed |
 | `/api/cluster/info` | GET | Cluster information (nodes, pods, namespaces) |
 | `/api/cluster/create` | POST | Create the Kind cluster with vulnerable configs |
+| `/api/cluster/create-and-attack` | POST | Create cluster and immediately run specified attack |
 | `/api/cluster/delete` | POST | Delete the Kind cluster |
+| `/api/cluster/setup-scenarios` | POST | Deploy vulnerable scenario configurations |
 | `/api/attacks` | GET | List all available attacks with metadata |
-| `/api/attacks/run/{id}` | POST | Execute a specific attack by ID (1-10) |
+| `/api/attacks/mitre` | GET | MITRE ATT&CK mapping for all attacks |
+| `/api/attacks/active` | GET | Currently active attack (if any) |
+| `/api/attacks/run/{attack_id}` | POST | Execute a specific attack by ID (1-10) |
 | `/api/attacks/run-all` | POST | Execute all 10 attacks sequentially |
-| `/api/attacks/history` | GET | Retrieve attack execution history |
-| `/api/detection/events` | GET | Get detection events with optional `limit` query param |
+| `/api/attacks/history` | GET | Retrieve attack execution history (query: `limit`, default 20, max 100) |
+| `/api/attacks/orchestrator` | GET | Get orchestrator status |
+| `/api/attacks/result/{execution_id}` | GET | Get result for a specific execution |
+| `/api/detection/events` | GET | Get detection events (query: `limit`, default 50, max 200) |
+| `/api/detection/summary` | GET | Get alert count summary by rule |
 | `/api/detection/start` | POST | Start the detection monitor watch |
 | `/api/detection/stop` | POST | Stop the detection monitor |
-| `/api/remediation/sessions` | GET | List all remediation sessions |
 | `/api/remediation/trigger` | POST | Trigger remediation for a specific attack result |
+| `/api/remediation/sessions` | GET | List all remediation sessions (query: `limit`, default 20, max 50) |
+| `/api/remediation/sessions/{session_id}` | GET | Get details for a specific remediation session |
+| `/api/remediation/auto-trigger/{execution_id}` | POST | Auto-trigger remediation for an execution |
 | `/api/results` | GET | Get the latest engagement results as JSON |
 | `/api/report` | GET | Download a PDF security assessment report |
 | `/api/chat` | POST | Send a natural language query about platform data |
@@ -279,9 +290,9 @@ Color-coded severity indicators: critical (red), high (orange), medium (amber), 
 | Privilege Escalation | TA0004 | T1611, T1548.003 | 1, 2, 3, 8 |
 | Credential Access | TA0006 | T1552.007, T1613 | 5 |
 | Discovery | TA0007 | T1046, T1613 | 7 |
-| Collection | TA0009 | T1113, T1057, T1613, T1021.006, T1048, T1572 | 4, 6, 10 |
+| Collection | TA0009 | T1113, T1613, T1021.006, T1048, T1572 | 4, 6, 10 |
 | Impact | TA0040 | T1496, T1499 | 9 |
-| Defense Evasion | TA0005 | T1612, T1562.001 | (monitored via detection rules) |
+| Defense Evasion | TA0005 | T1612 | (monitored via host-network detection rule) |
 | Lateral Movement | TA0008 | T1021.006, T1610 | (cross-namespace techniques) |
 | Execution | TA0002 | T1609, T1610 | (underlying capability) |
 
@@ -299,8 +310,8 @@ Color-coded severity indicators: critical (red), high (orange), medium (amber), 
     "status": "pending" | "running" | "completed" | "failed" | "detected",
     "mitre_tactic": str,
     "mitre_techniques": [{"id": str, "name": str}],
-    "infrastructure_affected": [{"resource_type": str, "name": str, "namespace": str, "details": dict}],
-    "events": [{"type": str, "message": str, "data": dict, "timestamp": float}],
+    "infrastructure_affected": [{"resource_type": str, "name": str, "namespace": str, "details": dict, "timestamp": float}],
+    "events": [{"event_type": str, "attack_id": str, "message": str, "data": dict, "timestamp": float}],
     "start_time": float,
     "end_time": float,
 }
@@ -309,14 +320,15 @@ Color-coded severity indicators: critical (red), high (orange), medium (amber), 
 ### Alert
 ```python
 {
-    "alert_id": str,
-    "rule_id": str,
-    "rule_name": str,
-    "severity": str,
-    "description": str,
+    "id": str,                          # e.g. "privileged-pod-creation-1234567890"
+    "alert_id": str,                    # rule ID
+    "name": str,                        # rule name (e.g. "Privileged Pod Created")
+    "severity": str,                    # "critical" | "high" | "medium"
+    "description": str,                 # rule description
     "mitre": {"tactic": str, "technique": str},
-    "resource": {"kind": str, "name": str, "namespace": str},
+    "details": dict,                    # event-specific details (pod name, namespace, etc.)
     "timestamp": float,
+    "count": int,                       # running count of this alert type
 }
 ```
 
@@ -325,9 +337,10 @@ Color-coded severity indicators: critical (red), high (orange), medium (amber), 
 {
     "session_id": str,
     "incident": dict,
-    "steps": [{"thinking": str, "command": str, "command_output": str, "command_success": bool, "timestamp": float}],
+    "steps": [{"thinking": str, "command": str | None, "command_output": str | None, "command_success": bool | None, "timestamp": float}],
     "status": "pending" | "running" | "completed" | "failed",
     "summary": str | None,
+    "error": str | None,
     "created_at": float,
     "completed_at": float | None,
 }
@@ -337,11 +350,42 @@ Color-coded severity indicators: critical (red), high (orange), medium (amber), 
 ```python
 {
     "ready": bool,
+    "name": str,                          # "k8s-attack-lab"
     "node_count": int,
     "pod_count": int,
-    "nodes": [{"name": str, "status": str, "k8s_version": str, "pods": int, "ip": str}],
+    "namespace_count": int,
+    "service_count": int,
+    "nodes": [
+        {
+            "name": str,
+            "status": str,
+            "kubelet": str,                # kubelet version string
+            "os": str,
+            "arch": str,
+            "ip": str,
+            "capacity": {"cpu": str, "memory": str, "pods": str},
+        }
+    ],
+    "pods": [
+        {
+            "name": str,
+            "namespace": str,
+            "node": str | None,
+            "status": str,
+            "ip": str | None,
+            "containers": int,
+        }
+    ],
     "namespaces": [str],
-    "services": [{"name": str, "namespace": str, "type": str, "cluster_ip": str, "ports": [int]}],
+    "services": [
+        {
+            "name": str,
+            "namespace": str,
+            "cluster_ip": str,
+            "type": str,
+            "ports": [{"port": int, "target_port": int | str | None, "protocol": str}],
+        }
+    ],
 }
 ```
 
@@ -349,4 +393,4 @@ Color-coded severity indicators: critical (red), high (orange), medium (amber), 
 
 ## 11. Conclusion
 
-KARMA provides a complete, transparent Kubernetes security assessment platform with real attacks, real detection, and real AI-powered remediation — all from a single terminal. The platform covers critical attack paths including container escape, privilege escalation, secrets exfiltration, network scanning, and resource hijacking, mapped to 8 MITRE ATT&CK tactics. The detection monitor catches all 10 attacks across 7 alert rules, and the Claude-powered remediation agent can autonomously clean up and harden the cluster after high and critical severity incidents.
+KARMA provides a complete, transparent Kubernetes security assessment platform with real attacks, real detection, and real AI-powered remediation — all from a single terminal. The platform covers critical attack paths including container escape, privilege escalation, secrets exfiltration, network scanning, and resource hijacking, mapped to 8 MITRE ATT&CK tactics. The detection monitor catches all 10 attacks across 7 alert rules, the Claude-powered remediation agent can autonomously clean up and harden the cluster after high and critical severity incidents, and the full REST API exposes 28 endpoints for programmatic access.
