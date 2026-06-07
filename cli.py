@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
 
@@ -397,7 +397,7 @@ def save_results(agent_workflow, attacks_res, alerts, dm, cm, ra):
 
     data = {
         "timestamp": time.time(),
-        "generated_at": datetime.now(datetime.UTC).isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "summary": summary,
         "attacks": attacks_res,
         "alerts": alerts,
@@ -587,11 +587,17 @@ async def ensure_ready(with_remediation=False):
     ra = None
     if with_remediation:
         ak = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not ak:
+            warn("ANTHROPIC_API_KEY not set")
+            print(f"  {' ' * 2}{C.dim}Enter your Anthropic API key to enable remediation (or press Enter to skip):{C.reset}")
+            ak = input(f"  {' ' * 6}{C.b_yellow}API Key:{C.reset} ").strip()
+            if ak:
+                os.environ["ANTHROPIC_API_KEY"] = ak
         if ak:
             ra = RemediationAgent(ws, ak)
             ok("Remediation agent ready")
         else:
-            warn("ANTHROPIC_API_KEY not set — remediation disabled")
+            warn("Remediation disabled — no API key configured")
 
     loop = asyncio.get_event_loop()
     return ws, cm, dm, ra, loop
