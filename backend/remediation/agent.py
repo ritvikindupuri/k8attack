@@ -199,18 +199,10 @@ Begin your analysis and remediation immediately."""
                     current_text += text
                     await self._process_stream_text(session, current_text, text)
 
-            # Phase 2: Auto-execute all commands immediately
-            has_commands = len([s for s in session.steps if s.command is not None]) > 0
-            if has_commands:
-                await self._broadcast({
-                    "type": "remediation_commands_ready",
-                    "session_id": session.session_id,
-                    "command_count": len([s for s in session.steps if s.command is not None]),
-                })
-
-                for step_index, step in enumerate(session.steps):
-                    if step.command:
-                        await self._execute_command(session, step, step_index)
+            # Execute any remaining commands (newly parsed after stream ends)
+            for step_index, step in enumerate(session.steps):
+                if step.command and not step.command_success and not step.command_output:
+                    await self._execute_command(session, step, step_index)
 
             await self._finalize_remediation(session, current_text)
 
@@ -254,6 +246,9 @@ Begin your analysis and remediation immediately."""
                     "thinking": thinking,
                     "command": cmd,
                 })
+
+                # Execute immediately so output shows right after this command
+                await self._execute_command(session, step, step_index)
 
         summary_match = re.search(r'<summary>\s*\n?(.*?)\n?\s*</summary>', full_text, re.DOTALL)
         if summary_match and session.summary is None:

@@ -133,10 +133,10 @@ def subtitle(text, color=C.white):
 
 def cmd_block(command):
     c = command.strip()
-    if len(c) > W - 12:
-        c = c[:W - 15] + '...'
+    max_w = W - 10
     print(f"  {C.b_cyan}┌─ Command {'─' * (W - 19)}┐{C.reset}")
-    print(f"  {C.b_cyan}│{C.reset} $ {C.cyan}{c}{C.reset} {' ' * (W - 9 - len(c))}{C.b_cyan}│{C.reset}")
+    for chunk in wrap_line(f"$ {c}", max_w):
+        print(f"  {C.b_cyan}│{C.reset} {C.cyan}{chunk}{C.reset} {' ' * (W - 9 - len(chunk))}{C.b_cyan}│{C.reset}")
     print(f"  {C.b_cyan}└{'─' * (W - 4)}┘{C.reset}")
 
 
@@ -145,30 +145,34 @@ def output_block(text):
         return
     lines = text.rstrip().split('\n')
     truncated = False
-    if len(lines) > 25:
-        lines = lines[:25]
-        truncated = True
+    max_w = W - 8
     print(f"  {C.green}┌─ Output {'─' * (W - 17)}┐{C.reset}")
     for line in lines:
         l = line.rstrip()
-        if len(l) > W - 8:
-            l = l[:W - 11] + '...'
-        print(f"  {C.green}│{C.reset} {C.green}{l}{C.reset} {' ' * (W - 9 - len(l))}{C.green}│{C.reset}")
-    if truncated:
-        print(f"  {C.green}│{C.reset} {C.dim}... ({len(text.rstrip().split(chr(10)))} lines total){C.reset} {' ' * (W - 24)}{C.green}│{C.reset}")
+        for chunk in wrap_line(l, max_w):
+            print(f"  {C.green}│{C.reset} {C.green}{chunk}{C.reset} {' ' * (W - 9 - len(chunk))}{C.green}│{C.reset}")
     print(f"  {C.green}└{'─' * (W - 4)}┘{C.reset}")
+
+
+def wrap_line(line, width):
+    """Yield chunks of line that fit within width."""
+    while len(line) > width:
+        yield line[:width]
+        line = line[width:]
+    if line:
+        yield line
 
 
 def thinking_block(text):
     if not text or not text.strip():
         return
     lines = text.strip().split('\n')
+    max_w = W - 8
     print(f"  {C.yellow}┌─ Agent Thinking {'─' * (W - 26)}┐{C.reset}")
     for line in lines:
         l = line.rstrip()
-        if len(l) > W - 8:
-            l = l[:W - 11] + '...'
-        print(f"  {C.yellow}│{C.reset} {C.yellow}{l}{C.reset} {' ' * (W - 9 - len(l))}{C.yellow}│{C.reset}")
+        for chunk in wrap_line(l, max_w):
+            print(f"  {C.yellow}│{C.reset} {C.yellow}{chunk}{C.reset} {' ' * (W - 9 - len(chunk))}{C.yellow}│{C.reset}")
     print(f"  {C.yellow}└{'─' * (W - 4)}┘{C.reset}")
 
 
@@ -263,9 +267,8 @@ class LiveWS:
                 print(f"  {C.green}┌─ Summary {'─' * (W - 20)}┐{C.reset}")
                 for line in lines:
                     l = line.rstrip()
-                    if len(l) > W - 8:
-                        l = l[:W - 11] + '...'
-                    print(f"  {C.green}│{C.reset} {C.green}{l}{C.reset} {' ' * (W - 9 - len(l))}{C.green}│{C.reset}")
+                    for chunk in wrap_line(l, W - 8):
+                        print(f"  {C.green}│{C.reset} {C.green}{chunk}{C.reset} {' ' * (W - 9 - len(chunk))}{C.green}│{C.reset}")
                 print(f"  {C.green}└{'─' * (W - 4)}┘{C.reset}")
             ok("Remediation complete")
 
