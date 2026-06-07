@@ -19,7 +19,6 @@ import subprocess
 import sys
 import time
 import uuid
-import getpass
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
@@ -588,17 +587,11 @@ async def ensure_ready(with_remediation=False):
     ra = None
     if with_remediation:
         ak = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not ak:
-            warn("ANTHROPIC_API_KEY not set")
-            print(f"  {' ' * 2}{C.dim}Enter your Anthropic API key to enable remediation (or press Enter to skip):{C.reset}")
-            ak = getpass.getpass(f"  {' ' * 6}{C.b_yellow}API Key:{C.reset} ").strip()
-            if ak:
-                os.environ["ANTHROPIC_API_KEY"] = ak
         if ak:
             ra = RemediationAgent(ws, ak)
             ok("Remediation agent ready")
         else:
-            warn("Remediation disabled — no API key configured")
+            warn("ANTHROPIC_API_KEY not set — remediation disabled")
 
     loop = asyncio.get_event_loop()
     return ws, cm, dm, ra, loop
