@@ -581,7 +581,7 @@ async def ensure_ready(with_remediation=False):
     if not prereqs.get("ready"):
         print()
         fail("Prerequisites not met. Run scripts/setup.sh first.")
-        return None, None, None, None
+        return None, None, None, None, None
 
     if cm.is_ready():
         info("Cluster ready — reusing existing cluster")
@@ -590,7 +590,7 @@ async def ensure_ready(with_remediation=False):
         r = await cm.create_cluster()
         if not r.get("success"):
             fail(f"Cluster creation: {r.get('error', '')}")
-        return None, None, None, None, None
+            return None, None, None, None, None
         ok("Cluster created")
 
     print()
