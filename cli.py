@@ -31,7 +31,8 @@ if os.path.isfile(env_path):
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 k, _, v = line.partition("=")
-                os.environ.setdefault(k.strip(), v.strip())
+                k, v = k.strip(), v.strip().strip("\"'")
+                os.environ.setdefault(k, v)
 
 from cluster_manager.manager import ClusterManager, CLUSTER_NAME
 from attack_engine.mitre import MITRE_ATTACK
