@@ -190,7 +190,7 @@ Set `ANTHROPIC_API_KEY` in `.env` (see `.env.example`) and select option **12** 
 
 Select option **13** to see a terminal-based summary including:
 - Attack success/failure counts by severity
-- MITRE ATT&CK coverage grid
+- MITRE ATT&CK coverage grid — shows `(covered/total)` techniques per tactic (e.g. `(0/2)` = 0 of 2 techniques executed for that tactic)
 - Agent execution timeline with step counts
 - Per-attack infrastructure details
 
