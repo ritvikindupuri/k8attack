@@ -25,7 +25,7 @@ Select option **11** (Run All Attacks) to see the full workflow — no API key n
 ## Features
 
 - **Real Kubernetes Cluster** — Creates a 3-node Kind cluster with intentionally vulnerable configurations
-- **10 Real Attack Modules** — Privilege escalation, container escape, secrets exfiltration, network scanning, kubelet API abuse, resource hijacking, DNS exfiltration
+- **10 Real Attack Modules** — HostPath privilege escalation, RBAC escalation, container escape, sidecar injection, secrets exfiltration, configmap exfiltration, network scanning, kubelet API abuse, resource hijacking, DNS exfiltration
 - **MITRE ATT&CK Mapping** — Every attack maps to specific tactics with a terminal-based coverage grid
 - **AI-Powered Remediation** — Claude Sonnet 4 autonomously remediates incidents with full chain-of-thought reasoning
 - **Agent Transparency** — Every agent shows: thinking → command → output, repeated for every step
