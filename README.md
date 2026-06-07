@@ -202,6 +202,20 @@ Select option **13** to see a terminal-based summary including:
 
 Select option **14** to see nodes, pods, services, and resource capacity.
 
+### Generate a PDF report
+
+The CLI doesn't have a dedicated menu option for PDF generation. To generate a professional PDF security assessment report:
+
+```bash
+# Start the API server
+python3 backend/main.py
+
+# Download the report (in another terminal)
+curl -o report.pdf http://localhost:8000/api/report
+```
+
+A sample report (10 attacks, 10 pages) is available at [`report.pdf`](report.pdf).
+
 ---
 
 ## Remediation
