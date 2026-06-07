@@ -8,25 +8,29 @@ Version 1.0.0
 
 - [1. Executive Summary](#1-executive-summary)
 - [2. System Architecture](#2-system-architecture)
-- [3. Attack Modules](#3-attack-modules)
-  - [3.1 Privilege Escalation via HostPath Mount](#31-privilege-escalation-via-hostpath-mount)
-  - [3.2 RBAC Privilege Escalation](#32-rbac-privilege-escalation)
-  - [3.3 Container Escape via Privileged Mode](#33-container-escape-via-privileged-mode)
-  - [3.4 Sidecar Proxy Injection](#34-sidecar-proxy-injection)
-  - [3.5 Kubernetes Secrets Exfiltration](#35-kubernetes-secrets-exfiltration)
-  - [3.6 ConfigMap Data Collection](#36-configmap-data-collection)
-  - [3.7 Internal Cluster Network Scan](#37-internal-cluster-network-scan)
-  - [3.8 Kubelet API Abuse](#38-kubelet-api-abuse)
-  - [3.9 Cluster Resource Hijacking](#39-cluster-resource-hijacking)
-  - [3.10 DNS-Based Data Exfiltration](#310-dns-based-data-exfiltration)
-- [4. Detection Monitor](#4-detection-monitor)
-- [5. Remediation Agent](#5-remediation-agent)
-- [6. API Reference](#6-api-reference)
-- [7. Chat Handler](#7-chat-handler)
-- [8. Report Generator](#8-report-generator)
-- [9. MITRE ATT&CK Coverage](#9-mitre-attck-coverage)
-- [10. Data Model](#10-data-model)
-- [11. Conclusion](#11-conclusion)
+- [3. Attack Engine](#3-attack-engine)
+- [4. Attack Modules](#4-attack-modules)
+  - [4.1 Privilege Escalation via HostPath Mount](#41-privilege-escalation-via-hostpath-mount)
+  - [4.2 RBAC Privilege Escalation](#42-rbac-privilege-escalation)
+  - [4.3 Container Escape via Privileged Mode](#43-container-escape-via-privileged-mode)
+  - [4.4 Sidecar Proxy Injection](#44-sidecar-proxy-injection)
+  - [4.5 Kubernetes Secrets Exfiltration](#45-kubernetes-secrets-exfiltration)
+  - [4.6 ConfigMap Data Collection](#46-configmap-data-collection)
+  - [4.7 Internal Cluster Network Scan](#47-internal-cluster-network-scan)
+  - [4.8 Kubelet API Abuse](#48-kubelet-api-abuse)
+  - [4.9 Cluster Resource Hijacking](#49-cluster-resource-hijacking)
+  - [4.10 DNS-Based Data Exfiltration](#410-dns-based-data-exfiltration)
+- [5. Detection Monitor](#5-detection-monitor)
+- [6. Remediation Agent](#6-remediation-agent)
+- [7. WebSocket Manager](#7-websocket-manager)
+- [8. CLI Tool](#8-cli-tool)
+- [9. API Reference](#9-api-reference)
+- [10. Chat Handler](#10-chat-handler)
+- [11. Report Generator](#11-report-generator)
+- [12. MITRE ATT&CK Coverage](#12-mitre-attck-coverage)
+- [13. Data Model](#13-data-model)
+- [14. Dependencies & Setup](#14-dependencies--setup)
+- [15. Conclusion](#15-conclusion)
 
 ---
 
@@ -58,9 +62,26 @@ Data flows: CLI → API → Attack Engine → Cluster → Detection Monitor → 
 
 ---
 
-## 3. Attack Modules
+## 3. Attack Engine
 
-### 3.1 Privilege Escalation via HostPath Mount
+**File:** `backend/attack_engine/engine.py`
+
+The `AttackEngine` class manages attack lifecycle. It maintains an `AVAILABLE_ATTACKS` registry mapping string IDs (e.g. `"privilege-escalation-hostpath"`) to attack classes. When `run_attack()` is called, it generates a UUID `execution_id`, instantiates the attack class with the cluster manager and WebSocket manager, and spawns the execution in a background `asyncio.create_task`.
+
+The engine tracks:
+- **Active attacks** (`self.active_attacks`): dict keyed by `execution_id` with status, start time, MITRE tactic, severity
+- **Attack history** (`self.attack_history`): list of completed attack result dicts (capped at 100)
+- **Completion callback** (`self.on_complete`): called for high/critical attacks to queue remediation
+
+Each attack runs via `asyncio.to_thread` wrapping `attack_instance.execute_with_id()`, broadcasting `attack_started`/`attack_completed`/`attack_failed` events over WebSocket.
+
+**File:** `backend/attack_engine/orchestrator.py`
+
+The `AttackOrchestrator` runs all 10 attacks sequentially via `run_all_attacks()`. It iterates `AVAILABLE_ATTACKS`, calls `engine.run_attack()` for each with a 2-second delay between launches, and broadcasts `orchestrator_started`/`orchestrator_completed` events. It also supports `stop()` to abort a running orchestration and `get_status()` to return progress.
+
+## 4. Attack Modules
+
+### 4.1 Privilege Escalation via HostPath Mount
 
 **File:** `backend/attack_engine/attacks/privilege_escalation.py`
 
@@ -72,7 +93,7 @@ Creates a pod (`hostpath-exploit`) in the `default` namespace that mounts the ho
 
 **Pod manifest:** `alpine:3.19`, command `sleep 3600`, volume mount of host `/` to `/host`, labels `app=exploit, attack=privilege-escalation`.
 
-### 3.2 RBAC Privilege Escalation
+### 4.2 RBAC Privilege Escalation
 
 **File:** `backend/attack_engine/attacks/privilege_escalation.py`
 
@@ -82,7 +103,7 @@ Creates a pod (`hostpath-exploit`) in the `default` namespace that mounts the ho
 
 Creates a service account (`malicious-admin`) in the `default` namespace, then binds it to the `cluster-admin` ClusterRole via a ClusterRoleBinding (`malicious-admin-binding`). Uses the Kubernetes Python API client directly to create the SA and binding — no pod is deployed. The binding grants the service account full admin privileges across all namespaces.
 
-### 3.3 Container Escape via Privileged Mode
+### 4.3 Container Escape via Privileged Mode
 
 **File:** `backend/attack_engine/attacks/container_escape.py`
 
@@ -94,7 +115,7 @@ Deploys a privileged container (`container-escape-pod`) with `hostPID: true` and
 
 **Pod manifest:** `alpine:3.19`, `privileged: true`, `hostPID: true`, `hostNetwork: true`, capabilities `SYS_ADMIN, SYS_PTRACE, SYS_CHROOT, DAC_OVERRIDE, NET_ADMIN, SYS_RAWIO`, cgroup hostPath volume at `/sys/fs/cgroup`, command `sleep 3600`, restart `Never`.
 
-### 3.4 Sidecar Proxy Injection
+### 4.4 Sidecar Proxy Injection
 
 **File:** `backend/attack_engine/attacks/container_escape.py`
 
@@ -107,7 +128,7 @@ Discovers target pods in the `default` namespace and attempts to inject a malici
 **Pod manifest (proxy):** `alpine:3.19`, `hostNetwork: true`, capabilities `NET_ADMIN, NET_RAW`, command `tcpdump -i any -c 50 -nn; sleep 3600`.
 **Target deployment:** `nginx:1.25-alpine`, port 80, 1 replica, labels `app=target-app`.
 
-### 3.5 Kubernetes Secrets Exfiltration
+### 4.5 Kubernetes Secrets Exfiltration
 
 **File:** `backend/attack_engine/attacks/secrets_access.py`
 
@@ -117,7 +138,7 @@ Discovers target pods in the `default` namespace and attempts to inject a malici
 
 Enumerates all secrets across all namespaces using the Kubernetes Python API directly (`api.list_namespaced_secret`). No pod is created — the attack runs in-process. Gets the default service account token via file read (`/var/run/secrets/kubernetes.io/serviceaccount/token`), discovers API server endpoint from environment variables (`KUBERNETES_SERVICE_HOST`, `KUBERNETES_PORT_443_TCP_PORT`), and queries the API for secrets across every namespace. Found secrets are base64-decoded and logged.
 
-### 3.6 ConfigMap Data Collection
+### 4.6 ConfigMap Data Collection
 
 **File:** `backend/attack_engine/attacks/secrets_access.py`
 
@@ -127,7 +148,7 @@ Enumerates all secrets across all namespaces using the Kubernetes Python API dir
 
 Enumerates all ConfigMaps across all namespaces using the Kubernetes Python API directly (`api.list_namespaced_config_map`). No pod is created — the attack runs in-process. Extracts data fields from every ConfigMap found, logs key-value previews, and reports the collected configuration data as intelligence.
 
-### 3.7 Internal Cluster Network Scan
+### 4.7 Internal Cluster Network Scan
 
 **File:** `backend/attack_engine/attacks/network_scan.py`
 
@@ -139,7 +160,7 @@ Deploys a pod (`network-scanner`) that discovers the cluster's service CIDR and 
 
 **Pod manifest:** `alpine:3.19`, command `sleep 300`, restart `Never`. Tools installed post-deploy: `nmap`, `nmap-ncat`, `bind-tools`.
 
-### 3.8 Kubelet API Abuse
+### 4.8 Kubelet API Abuse
 
 **File:** `backend/attack_engine/attacks/network_scan.py`
 
@@ -151,7 +172,7 @@ Deploys a pod (`kubelet-scanner`) with `hostNetwork: true` to bypass network pol
 
 **Pod manifest:** `alpine:3.19`, `hostNetwork: true`, command `apk add --no-cache curl && sleep 300`, restart `Never`.
 
-### 3.9 Cluster Resource Hijacking
+### 4.9 Cluster Resource Hijacking
 
 **File:** `backend/attack_engine/attacks/resource_hijack.py`
 
@@ -163,7 +184,7 @@ Deploys resource-intensive pods (`resource-hijacker-0` through `resource-hijacke
 
 **Pod manifest:** `alpine:3.19`, resource requests `cpu: 500m, memory: 256Mi`, limits `cpu: 1000m, memory: 512Mi`, command `dd if=/dev/zero of=/dev/null bs=1M count=100` in infinite loop, `nodeAffinity` to pin pods to specific nodes, restart `Always`.
 
-### 3.10 DNS-Based Data Exfiltration
+### 4.10 DNS-Based Data Exfiltration
 
 **File:** `backend/attack_engine/attacks/dns_exfiltration.py`
 
@@ -177,7 +198,7 @@ Creates a pod (`dns-exfil-pod`) that encodes simulated stolen data (service acco
 
 ---
 
-## 4. Detection Monitor
+## 5. Detection Monitor
 
 **File:** `backend/detection/monitor.py`
 
@@ -202,7 +223,7 @@ Events are broadcast via WebSocket to connected clients and stored in `detection
 
 ---
 
-## 5. Remediation Agent
+## 6. Remediation Agent
 
 **File:** `backend/remediation/agent.py`
 
@@ -226,7 +247,61 @@ Claude Sonnet 4 (`claude-sonnet-4-20250514`) via Anthropic API
 
 ---
 
-## 6. API Reference
+## 7. WebSocket Manager
+
+**File:** `backend/ws_manager/handler.py`
+
+The `WebSocketManager` class manages all WebSocket connections to the FastAPI backend. It maintains a set of active connections and metadata (connection time, client IP) for each.
+
+**Key methods:**
+- `connect(websocket)` — Accepts a new WebSocket connection, stores it, sends a `connected` confirmation message.
+- `disconnect(websocket)` — Removes a connection from the set.
+- `broadcast(message)` — Sends a JSON message to all connected clients. Dead connections are automatically cleaned up on failure.
+- `send_to(websocket, message)` — Sends a JSON message to a specific client.
+
+All components (attack engine, detection monitor, remediation agent, cluster manager) use the WebSocket manager to stream real-time events to the CLI. Event types include: `attack_started`, `attack_event`, `attack_completed`, `attack_failed`, `detection_alert`, `remediation_started`, `remediation_command_found`, `remediation_command_result`, `remediation_completed`, `remediation_failed`, `orchestrator_started`, `orchestrator_completed`, `monitor_started`, `monitor_stopped`.
+
+The WebSocket endpoint is at `/ws` (see API reference).
+
+---
+
+## 8. CLI Tool
+
+**File:** `cli.py`
+
+The CLI is the primary user interface. It connects to backend components directly (in-process, not via HTTP when running locally) and renders all output with ANSI colors and Unicode box-drawing characters.
+
+### Terminal Formatting
+- `C` class — Defines ANSI color constants (cyan, green, yellow, red, blue, magenta, white, dim, bold). Falls back to empty strings when stdout is not a TTY.
+- `section()`, `box()`, `box_end()` — Draw bordered section headers and info boxes.
+- `cmd_block()` — Renders a kubectl command in a cyan-bordered box with `$` prefix.
+- `output_block()` — Renders command output in a green-bordered box (truncated to 25 lines).
+- `thinking_block()` — Renders agent reasoning in a yellow-bordered box.
+- `ok()`, `fail()`, `warn()`, `info()` — Status icons (✔, ✘, ⚠, ℹ) with color.
+
+### LiveWS Class (line 190)
+A mock WebSocket manager that prints events directly to the terminal in real-time. Implements the same interface as the real `WebSocketManager` but renders formatted output instead of sending over the wire. Handles event types: `attack_event` (cmd/info/start/complete/error), `detection_alert`, `remediation_started`, `remediation_command_found`, `remediation_command_result`, `remediation_completed`, `remediation_failed`.
+
+### Attack Registry (line 72)
+A list of 10 attack tuples mapping string IDs to attack classes and severity labels. Used by the menu system and command execution.
+
+### Menu System (line 521)
+`show_menu()` renders an interactive terminal menu with 14 options grouped into Attack Modules (1–10), Campaigns (11–12), Intelligence (13–14), and Exit (0). Input is read via `input()` and routed in the `main_async()` event loop.
+
+### Execution Flow
+1. `ensure_ready()` — Checks prerequisites, creates/reuses Kind cluster, starts detection monitor, optionally initializes remediation agent.
+2. `run_attack_instance()` — Creates attack instance, displays header with name/severity/MITRE, executes via `asyncio.to_thread`, builds structured step list from raw events.
+3. `run_remediation()` — Calls `remediation_agent.trigger_remediation()`, polls until completion, builds structured step list.
+4. `save_results()` — Compiles all attack results, alerts, remediation sessions, MITRE coverage into a JSON file saved to `results/findings_{timestamp}.json`.
+5. `display_results()` — Renders summary stats, MITRE coverage grid (●/○ per tactic), agent execution timeline, and per-attack infrastructure details.
+
+### Command-line Arguments
+- `python3 cli.py` — Launch interactive menu.
+- `python3 cli.py --check` — Quick cluster health check (ready, node count, pod count).
+
+---
+
+## 9. API Reference
 
 **Base URL:** `http://localhost:8000`
 
@@ -263,7 +338,7 @@ Claude Sonnet 4 (`claude-sonnet-4-20250514`) via Anthropic API
 
 ---
 
-## 7. Chat Handler
+## 10. Chat Handler
 
 **File:** `backend/chat/handler.py`
 
@@ -277,7 +352,7 @@ The system prompt restricts output formatting to ALL CAPS headers, `<b>` tags fo
 
 ---
 
-## 8. Report Generator
+## 11. Report Generator
 
 **File:** `backend/report/generator.py`
 
@@ -296,7 +371,7 @@ Color-coded severity indicators: critical (red), high (orange), medium (amber), 
 
 ---
 
-## 9. MITRE ATT&CK Coverage
+## 12. MITRE ATT&CK Coverage
 
 | Tactic | ID | Techniques Covered | Attack Modules |
 |--------|----|-------------------|----------------|
@@ -311,7 +386,7 @@ Color-coded severity indicators: critical (red), high (orange), medium (amber), 
 
 ---
 
-## 10. Data Model
+## 13. Data Model
 
 ### Attack
 ```python
@@ -404,6 +479,27 @@ Color-coded severity indicators: critical (red), high (orange), medium (amber), 
 
 ---
 
-## 11. Conclusion
+## 14. Dependencies & Setup
+
+**File:** `backend/requirements.txt`
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `fastapi` | >=0.100.0 | REST API framework |
+| `uvicorn[standard]` | >=0.20.0 | ASGI server |
+| `websockets` | >=10.0 | WebSocket support |
+| `kubernetes` | >=25.0.0 | Kubernetes Python client |
+| `pyyaml` | >=6.0.0 | YAML parsing |
+| `httpx` | >=0.24.0 | Async HTTP client |
+| `anthropic` | >=0.30.0 | Claude API client |
+| `reportlab` | >=4.0.0 | PDF report generation |
+
+**File:** `scripts/setup.sh`
+
+A bash script that checks for prerequisites (`python3`, `kind`, `kubectl`, `docker`), installs kind if missing (via brew on macOS, direct binary download on Linux), installs kubectl v1.30.0 if missing, creates a Python virtual environment, installs pip dependencies, and prints a success message with the `ANTHROPIC_API_KEY` setup instruction.
+
+---
+
+## 15. Conclusion
 
 KARMA provides a complete, transparent Kubernetes security assessment platform with real attacks, real detection, and real AI-powered remediation — all from a single terminal. The platform covers critical attack paths including container escape, privilege escalation, secrets exfiltration, network scanning, and resource hijacking, mapped to 8 MITRE ATT&CK tactics. The detection monitor catches all 10 attacks across 7 alert rules, the Claude-powered remediation agent can autonomously clean up and harden the cluster after high and critical severity incidents, and the full REST API exposes 28 endpoints for programmatic access.
