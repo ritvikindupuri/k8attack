@@ -1,3 +1,4 @@
+import html
 import io
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -56,6 +57,17 @@ STATUS_COLORS = {
     'auto-remediated': HexColor('#10b981'),
 }
 
+EVENT_TYPE_COLORS = {
+    'info': MEDIUM_GRAY,
+    'success': ACCENT_GREEN,
+    'warning': ACCENT_AMBER,
+    'error': ACCENT_RED,
+    'detected': HexColor('#3b82f6'),
+    'complete': ACCENT_GREEN,
+    'critical': ACCENT_RED,
+    'cmd': DARK_NAVY,
+}
+
 styles_cache = {}
 
 def _s(name, **kwargs):
@@ -82,7 +94,7 @@ def build_styles():
     _s('CommandText', fontName='Courier', fontSize=7.5, leading=10, textColor=DARK_NAVY, spaceAfter=2*mm)
     _s('CommandOutput', fontName='Courier', fontSize=7, leading=9, textColor=HexColor('#475569'), spaceAfter=2*mm)
     _s('BulletBody', fontName='Helvetica', fontSize=9.5, leading=14, textColor=HexColor('#334155'), leftIndent=4*mm, bulletIndent=0, spaceAfter=2*mm)
-    _s('ConclusionText', fontName='Helvetica-Oblique', fontSize=10, leading=15, textColor=DARK_GRAY, alignment=TA_JUSTIFY, spaceAfter=4*mm)
+    _s('ConclusionText', fontName='Helvetica', fontSize=10, leading=15, textColor=DARK_GRAY, alignment=TA_JUSTIFY, spaceAfter=4*mm)
     _s('FooterStyle', fontName='Helvetica', fontSize=7.5, leading=10, textColor=MEDIUM_GRAY, alignment=TA_CENTER)
 
 
@@ -190,7 +202,7 @@ class HeaderBar(Flowable):
         self.canv.roundRect(0, 0, 3, self.height, 1.5, fill=1, stroke=0)
 
 
-def make_table(headers: List[str], rows: List[List], col_widths: Optional[List[float]] = None, severity_col: Optional[int] = None) -> Table:
+def make_table(headers: List[str], rows: List[List], col_widths: Optional[List[float]] = None) -> Table:
     def _style_cell(text, is_header=False):
         style = 'TableHeader' if is_header else 'TableCell'
         p = Paragraph(str(text), _s(style))
@@ -224,6 +236,21 @@ def make_table(headers: List[str], rows: List[List], col_widths: Optional[List[f
     return t
 
 
+def _fmt_ts(epoch_secs: float) -> str:
+    if not epoch_secs:
+        return '—'
+    return datetime.fromtimestamp(epoch_secs, tz=timezone.utc).strftime('%H:%M:%S')
+
+
+def _fmt_duration(start: float, end: float) -> str:
+    if not start or not end:
+        return '—'
+    d = end - start
+    if d < 60:
+        return f'{d:.1f}s'
+    return f'{d/60:.1f}m {d%60:.0f}s'
+
+
 def on_page(canvas_obj, doc):
     canvas_obj.saveState()
     if doc.page == 1:
@@ -244,7 +271,7 @@ def on_page(canvas_obj, doc):
         canvas_obj.line(MARGIN, PAGE_H - 12*mm, PAGE_W - MARGIN, PAGE_H - 12*mm)
         canvas_obj.setFont('Helvetica', 7)
         canvas_obj.setFillColor(MEDIUM_GRAY)
-        canvas_obj.drawString(MARGIN, PAGE_H - 11*mm, 'K8s Attack & Remediation Platform — Security Assessment Report')
+        canvas_obj.drawString(MARGIN, PAGE_H - 11*mm, 'K8s Attack & Remediation Platform \u2014 Security Assessment Report')
         canvas_obj.drawRightString(PAGE_W - MARGIN, PAGE_H - 11*mm, datetime.now().strftime('%Y-%m-%d'))
         canvas_obj.setStrokeColor(HexColor('#e2e8f0'))
         canvas_obj.setLineWidth(0.5)
@@ -269,37 +296,51 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
     story = []
     generated_at = datetime.now(timezone.utc).strftime('%B %d, %Y at %H:%M UTC')
 
-    # COVER PAGE
+    attacks = data.get('attacks', [])
+    alerts = data.get('detection', {}).get('events', [])
+    alert_summary = data.get('detection', {}).get('summary', {})
+    remediations = data.get('remediation', {}).get('sessions', [])
+    critical_count = sum(1 for a in attacks if a.get('severity', '').lower() == 'critical')
+    high_count = sum(1 for a in attacks if a.get('severity', '').lower() == 'high')
+    medium_count = sum(1 for a in attacks if a.get('severity', '').lower() == 'medium')
+    low_count = sum(1 for a in attacks if a.get('severity', '').lower() == 'low')
+    completed = sum(1 for a in attacks if a.get('status', '').lower() in ('completed', 'success'))
+    failed = sum(1 for a in attacks if a.get('status', '').lower() == 'failed')
+    mitre_tactics = data.get('mitre', {}).get('tactics', [])
+    cluster_nodes = data.get('cluster', {}).get('nodes', [])
+
+    total_techniques = sum(len(t.get('techniques', [])) for t in mitre_tactics)
+    covered_techniques = sum(t.get('covered_count', len(t.get('techniques', []))) for t in mitre_tactics)
+
+    # ── COVER PAGE ──────────────────────────────────────────────
     story.append(Spacer(1, 50*mm))
     story.append(Paragraph('K8s Attack & Remediation Platform', _s('CoverTitle')))
     story.append(Paragraph('Security Assessment Report', _s('CoverSubtitle')))
     story.append(SectionDivider(ACCENT_RED, 55*mm))
     story.append(Spacer(1, 4*mm))
     story.append(Paragraph(f'Generated: {generated_at}', _s('CoverMeta')))
-    story.append(Spacer(1, 15*mm))
 
-    attacks = data.get('attacks', [])
-    alerts = data.get('detection', {}).get('events', [])
-    remediations = data.get('remediation', {}).get('sessions', [])
-    critical_count = sum(1 for a in attacks if a.get('severity', '').lower() == 'critical')
-    high_count = sum(1 for a in attacks if a.get('severity', '').lower() == 'high')
-    completed = sum(1 for a in attacks if a.get('status', '').lower() in ('completed', 'success'))
-    failed = sum(1 for a in attacks if a.get('status', '').lower() == 'failed')
-    mitre_tactics = data.get('mitre', {}).get('tactics', [])
+    cluster_name = data.get('cluster', {}).get('name', 'k8s-attack-lab')
+    story.append(Paragraph(f'Cluster: {cluster_name} ({len(cluster_nodes)} nodes)', _s('CoverMeta')))
+    story.append(Paragraph(f'Assessment Type: Automated Attack Simulation & Detection', _s('CoverMeta')))
+    story.append(Spacer(1, 15*mm))
 
     cover_stats = [
         ['Total Attacks Executed', str(len(attacks))],
-        ['Critical Severity', str(critical_count)],
-        ['High Severity', str(high_count)],
         ['Completed Successfully', str(completed)],
         ['Failed', str(failed)],
+        ['Critical Severity', str(critical_count)],
+        ['High Severity', str(high_count)],
+        ['Medium Severity', str(medium_count)],
+        ['Low Severity', str(low_count)],
         ['Detection Alerts Triggered', str(len(alerts))],
         ['Remediation Actions Taken', str(len(remediations))],
         ['MITRE ATT&CK Tactics Covered', str(len(mitre_tactics))],
+        ['MITRE Techniques Covered', f'{covered_techniques}/{total_techniques}'],
     ]
     stat_table = Table(
         [[Paragraph(r[0], _s('CoverMeta')), Paragraph(r[1], _s('CoverMeta'))] for r in cover_stats],
-        colWidths=[45*mm, 25*mm],
+        colWidths=[50*mm, 25*mm],
     )
     stat_table.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, -1), 'LEFT'),
@@ -311,7 +352,7 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
     story.append(stat_table)
     story.append(PageBreak())
 
-    # EXECUTIVE SUMMARY
+    # ── 1. EXECUTIVE SUMMARY ────────────────────────────────────
     story.append(Paragraph('1. Executive Summary', _s('SectionTitle')))
     story.append(SectionDivider())
 
@@ -325,7 +366,29 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
         f'and data plane components.'
     )
     story.append(Paragraph(exec_text, _s('Body')))
+    story.append(Spacer(1, 2*mm))
+
+    story.append(Paragraph(f'Assessment Overview', _s('SubSubSection')))
+    story.append(Spacer(1, 1*mm))
+
+    overview_rows = [
+        ['Total Attacks', str(len(attacks)), 'Attacks executed against the cluster'],
+        ['Passed', str(completed), 'Attacks that completed successfully'],
+        ['Failed', str(failed), 'Attacks that failed during execution'],
+        ['Critical Issues', str(critical_count), 'Critical-severity vulnerabilities identified'],
+        ['High Issues', str(high_count), 'High-severity vulnerabilities identified'],
+        ['Alerts Triggered', str(len(alerts)), 'Detection events from cluster monitoring'],
+        ['Remediations', str(len(remediations)), 'AI-driven remediation actions performed'],
+        ['MITRE Tactics', str(len(mitre_tactics)), 'ATT&CK tactics with covered techniques'],
+    ]
+    overview_table = make_table(
+        ['Metric', 'Count', 'Description'],
+        overview_rows,
+        col_widths=[30*mm, 16*mm, 104*mm],
+    )
+    story.append(overview_table)
     story.append(Spacer(1, 3*mm))
+
     story.append(Paragraph('Key Findings', _s('SubSubSection')))
     story.append(Spacer(1, 1*mm))
 
@@ -338,11 +401,11 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
         if high_count > 0:
             findings.append(f'{high_count} high-severity issues identified, posing significant risk to cluster security posture.')
         if len(mitre_tactics) > 0:
-            findings.append(f'{len(mitre_tactics)} MITRE ATT&CK tactics covered across {len(attacks)} distinct attack techniques.')
+            findings.append(f'{len(mitre_tactics)} MITRE ATT&CK tactics covered across {len(attacks)} distinct attack techniques with {covered_techniques}/{total_techniques} techniques demonstrated.')
         if len(remediations) > 0:
             findings.append(f'{len(remediations)} automated remediation actions executed via AI-powered agent (Claude Sonnet 4), with step-by-step reasoning and command validation.')
         if failed > 0:
-            findings.append(f'{failed} attacks failed to execute — potential false negatives requiring manual investigation.')
+            findings.append(f'{failed} attacks failed to execute \u2014 potential false negatives requiring manual investigation.')
         for f in findings:
             story.append(Paragraph(f'<bullet>&bull;</bullet>{f}', _s('BulletBody')))
 
@@ -352,12 +415,12 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
 
     story.append(PageBreak())
 
-    # ATTACK SUMMARY
+    # ── 2. ATTACK SUMMARY ───────────────────────────────────────
     story.append(Paragraph('2. Attack Summary', _s('SectionTitle')))
     story.append(SectionDivider())
     story.append(Paragraph(
         'The following table summarizes all attacks executed during the assessment, including their '
-        'severity rating, status, and mapped MITRE ATT&CK technique.',
+        'severity rating, status, MITRE ATT&CK mapping, execution time, and duration.',
         _s('Body')
     ))
     story.append(Spacer(1, 3*mm))
@@ -366,22 +429,29 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
     for i, a in enumerate(attacks, 1):
         sev = a.get('severity', 'info').capitalize()
         st = a.get('status', 'unknown').capitalize()
+        result = a.get('result', {}) or a
+        start = result.get('start_time', a.get('start_time', 0))
+        end = result.get('end_time', a.get('end_time', 0))
+        techniques = result.get('mitre_techniques', a.get('mitre_techniques', []))
+        tech_str = ', '.join([t.get('name', '') for t in techniques]) if techniques else (a.get('technique', a.get('mitre_technique', '\u2014')))
         attack_rows.append([
             str(i),
             a.get('name', a.get('attack_id', 'Unknown')),
             sev,
             st,
-            a.get('technique', a.get('mitre_technique', '—')),
+            _fmt_ts(start),
+            _fmt_duration(start, end),
+            tech_str,
         ])
 
     attack_table = make_table(
-        ['#', 'Attack', 'Severity', 'Status', 'MITRE Technique'],
+        ['#', 'Attack', 'Severity', 'Status', 'Start', 'Duration', 'MITRE Technique'],
         attack_rows,
-        col_widths=[8*mm, 50*mm, 18*mm, 20*mm, 54*mm],
+        col_widths=[6*mm, 40*mm, 14*mm, 16*mm, 14*mm, 14*mm, 46*mm],
     )
     story.append(attack_table)
 
-    # MITRE COVERAGE
+    # ── 3. MITRE ATT&CK COVERAGE ────────────────────────────────
     story.append(Paragraph('3. MITRE ATT&CK Coverage', _s('SectionTitle')))
     story.append(SectionDivider())
     story.append(Paragraph(
@@ -394,94 +464,227 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
     mitre_rows = []
     for t in mitre_tactics:
         techniques = t.get('techniques', [])
+        covered = t.get('covered_count', len(techniques))
+        total = len(techniques)
         tech_names = ', '.join([tech.get('name', '') for tech in techniques])
-        covered = len(techniques)
         mitre_rows.append([
-            t.get('id', '—'),
-            t.get('name', '—'),
-            str(covered),
+            t.get('id', '\u2014'),
+            t.get('name', '\u2014'),
+            f'{covered}/{total}',
             tech_names,
         ])
 
     mitre_table = make_table(
-        ['Tactic ID', 'Tactic Name', 'Techniques', 'Covered Techniques'],
+        ['Tactic ID', 'Tactic Name', 'Covered', 'Techniques'],
         mitre_rows,
-        col_widths=[20*mm, 35*mm, 18*mm, 77*mm],
+        col_widths=[18*mm, 38*mm, 16*mm, 78*mm],
     )
     story.append(mitre_table)
 
+    # ── 4. CLUSTER INFRASTRUCTURE ───────────────────────────────
+    if cluster_nodes:
+        story.append(Paragraph('4. Cluster Infrastructure', _s('SectionTitle')))
+        story.append(SectionDivider())
+        story.append(Paragraph(
+            'The assessment was conducted against a Kind-based Kubernetes cluster with the following nodes '
+            'and infrastructure configuration.',
+            _s('Body')
+        ))
+        story.append(Spacer(1, 3*mm))
+
+        node_rows = []
+        for n in cluster_nodes:
+            cap = n.get('capacity', {})
+            node_rows.append([
+                n.get('name', '\u2014'),
+                n.get('status', '\u2014'),
+                cap.get('cpu', '?'),
+                cap.get('memory', '?'),
+                cap.get('pods', '?'),
+                n.get('os', '\u2014'),
+                n.get('kubelet', '\u2014'),
+            ])
+
+        node_table = make_table(
+            ['Name', 'Status', 'CPU', 'Memory', 'Max Pods', 'OS', 'Kubelet'],
+            node_rows,
+            col_widths=[40*mm, 14*mm, 10*mm, 22*mm, 14*mm, 28*mm, 22*mm],
+        )
+        story.append(node_table)
+
+    story.append(PageBreak())
+
+    # ── 5. DETAILED ATTACK LOG ──────────────────────────────────
     if attacks:
-        story.append(Paragraph('4. Detailed Attack Log', _s('SectionTitle')))
+        story.append(Paragraph('5. Detailed Attack Log', _s('SectionTitle')))
         story.append(SectionDivider())
         story.append(Paragraph(
             'The following section provides detailed information for each attack executed, including '
-            'the attack methodology, findings, and impact assessment.',
+            'attack methodology, execution timeline, events, commands issued, infrastructure affected, '
+            'and impact assessment.',
             _s('Body')
         ))
         story.append(Spacer(1, 3*mm))
 
         for i, a in enumerate(attacks, 1):
             sev = a.get('severity', 'info').lower()
+            result = a.get('result', {}) or a
+            events = result.get('events', a.get('events', []))
+            infrastructure = result.get('infrastructure_affected', a.get('infrastructure_affected', []))
+            techniques = result.get('mitre_techniques', a.get('mitre_techniques', []))
+            start = result.get('start_time', a.get('start_time', 0))
+            end = result.get('end_time', a.get('end_time', 0))
+            status = a.get('status', 'unknown').lower()
+            error = a.get('error', '')
+
             story.append(KeepTogether([
-                Paragraph(f'4.{i} {a.get("name", a.get("attack_id", f"Attack {i}"))}', _s('SubSectionTitle')),
+                Paragraph(f'5.{i} {a.get("name", a.get("attack_id", f"Attack {i}"))}', _s('SubSectionTitle')),
                 SeverityBadge(sev),
                 Spacer(1, 2*mm),
             ]))
-            story.append(Paragraph(f'<b>Attack ID:</b> {a.get("attack_id", "—")}', _s('Body')))
-            story.append(Paragraph(f'<b>Severity:</b> {sev.capitalize()}', _s('Body')))
-            story.append(Paragraph(f'<b>Status:</b> {a.get("status", "Unknown").capitalize()}', _s('Body')))
-            story.append(Paragraph(f'<b>MITRE Technique:</b> {a.get("technique", a.get("mitre_technique", "—"))}', _s('Body')))
-            if a.get('description'):
-                story.append(Paragraph(f'<b>Description:</b> {a["description"]}', _s('Body')))
-            if a.get('result'):
-                story.append(Paragraph(f'<b>Result:</b> {a["result"]}', _s('Body')))
-            if a.get('finding'):
-                story.append(Paragraph(f'<b>Finding:</b> {a["finding"]}', _s('Body')))
-            story.append(Spacer(1, 4*mm))
 
-    # DETECTION ALERTS
+            meta_rows = []
+            meta_rows.append([Paragraph('<b>Attack ID</b>', _s('TableCellBold')), Paragraph(str(a.get('attack_id', '\u2014')), _s('TableCell'))])
+            meta_rows.append([Paragraph('<b>Severity</b>', _s('TableCellBold')), Paragraph(sev.capitalize(), _s('TableCell'))])
+            meta_rows.append([Paragraph('<b>Status</b>', _s('TableCellBold')), Paragraph(status.capitalize(), _s('TableCell'))])
+            meta_rows.append([Paragraph('<b>Start Time</b>', _s('TableCellBold')), Paragraph(_fmt_ts(start), _s('TableCell'))])
+            meta_rows.append([Paragraph('<b>Duration</b>', _s('TableCellBold')), Paragraph(_fmt_duration(start, end), _s('TableCell'))])
+            if techniques:
+                tech_names = '; '.join([f'{t.get("id", "")} {t.get("name", "")}' for t in techniques])
+                meta_rows.append([Paragraph('<b>MITRE Techniques</b>', _s('TableCellBold')), Paragraph(tech_names, _s('TableCell'))])
+            if a.get('description'):
+                meta_rows.append([Paragraph('<b>Description</b>', _s('TableCellBold')), Paragraph(a['description'], _s('TableCell'))])
+
+            meta_table = Table(
+                meta_rows,
+                colWidths=[28*mm, 120*mm],
+            )
+            meta_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+            ]))
+            story.append(meta_table)
+            story.append(Spacer(1, 2*mm))
+
+            if error:
+                story.append(Paragraph(f'<b>Error:</b> <font color="{ACCENT_RED.hexval()}">{error}</font>', _s('Body')))
+
+            # Infrastructure affected
+            if infrastructure:
+                story.append(Paragraph('Infrastructure Affected', _s('SubSubSection')))
+                story.append(Spacer(1, 1*mm))
+                infra_rows = []
+                for inf in infrastructure[:6]:
+                    rtype = inf.get('resource_type', '\u2014')
+                    rname = inf.get('name', inf.get('namespace', '\u2014'))
+                    rnamespace = inf.get('namespace', '\u2014')
+                    details = inf.get('details', {})
+                    detail_str = ', '.join([f'{k}: {v}' for k, v in details.items() if not isinstance(v, (dict, list))])[:60]
+                    infra_rows.append([rtype, rname, rnamespace, detail_str])
+                if infra_rows:
+                    infra_table = make_table(
+                        ['Resource Type', 'Name', 'Namespace', 'Details'],
+                        infra_rows,
+                        col_widths=[30*mm, 35*mm, 25*mm, 60*mm],
+                    )
+                    story.append(infra_table)
+                story.append(Spacer(1, 2*mm))
+
+            # Events (commands and output)
+            if events:
+                cmd_events = [e for e in events if e.get('event_type') == 'cmd']
+                key_events = [e for e in events if e.get('event_type') in ('info', 'success', 'warning', 'error', 'critical', 'detected', 'complete')]
+
+                if key_events:
+                    story.append(Paragraph('Execution Timeline', _s('SubSubSection')))
+                    story.append(Spacer(1, 1*mm))
+                    timeline_rows = []
+                    for e in key_events[:8]:
+                        etype = e.get('event_type', 'info')
+                        emsg = e.get('message', '')
+                        ets = _fmt_ts(e.get('timestamp', 0))
+                        color = EVENT_TYPE_COLORS.get(etype, MEDIUM_GRAY)
+                        icon = {'info': '\u2139', 'success': '\u2713', 'warning': '\u26a0', 'error': '\u2717', 'detected': '\u25c9', 'complete': '\u2713', 'critical': '\u26a0'}.get(etype, '\u2022')
+                        timeline_rows.append([
+                            f'<font color="{color.hexval()}">{icon}</font>',
+                            ets,
+                            etype.capitalize(),
+                            emsg[:100],
+                        ])
+                    timeline_table = make_table(
+                        ['', 'Time', 'Type', 'Event'],
+                        timeline_rows,
+                        col_widths=[6*mm, 16*mm, 18*mm, 110*mm],
+                    )
+                    story.append(timeline_table)
+                    story.append(Spacer(1, 2*mm))
+
+                if cmd_events:
+                    story.append(Paragraph('Commands Executed', _s('SubSubSection')))
+                    story.append(Spacer(1, 1*mm))
+                    for ci, ce in enumerate(cmd_events[:4], 1):
+                        cmd = ce.get('data', {}).get('command', ce.get('command', ''))
+                        output = ce.get('data', {}).get('output', ce.get('output', ''))
+                        if cmd:
+                            story.append(Paragraph(f'<b>Command {ci}:</b>', _s('SmallText')))
+                            story.append(Paragraph(html.escape(cmd), _s('CommandText')))
+                        if output:
+                            truncated = output[:250] + ('\u2026' if len(output) > 250 else '')
+                            story.append(Paragraph(truncated, _s('CommandOutput')))
+                    story.append(Spacer(1, 2*mm))
+
+            story.append(HRFlowable(width='100%', thickness=0.3, color=BORDER_COLOR, spaceAfter=3*mm, spaceBefore=3*mm))
+
+    # ── 6. DETECTION & ALERTS ───────────────────────────────────
     if alerts:
         story.append(PageBreak())
-        story.append(Paragraph('5. Detection & Alerts', _s('SectionTitle')))
+        story.append(Paragraph('6. Detection & Alerts', _s('SectionTitle')))
         story.append(SectionDivider())
         story.append(Paragraph(
-            'The detection monitor continuously observes the cluster for signs of malicious activity. '
-            'The following alerts were triggered during the assessment.',
+            'The detection monitor continuously observes the cluster for signs of malicious activity using '
+            'Kubernetes watch APIs. Alerts are generated when resources matching predefined alert rules are '
+            'created or modified.',
             _s('Body')
         ))
         story.append(Spacer(1, 3*mm))
 
-        alert_rows = []
-        summary_counts = data.get('detection', {}).get('summary', {})
-        if summary_counts:
-            story.append(Paragraph(f'<b>Alert Summary:</b> {summary_counts.get("total", 0)} total alerts — '
-                                   f'<font color="#ef4444">{summary_counts.get("critical", 0)} critical</font>, '
-                                   f'<font color="#f97316">{summary_counts.get("high", 0)} high</font>, '
-                                   f'<font color="#f59e0b">{summary_counts.get("medium", 0)} medium</font>, '
-                                   f'<font color="#eab308">{summary_counts.get("low", 0)} low</font>',
-                                   _s('Body')))
+        if alert_summary:
+            sc = alert_summary
+            story.append(Paragraph(
+                f'<b>Alert Summary:</b> {sc.get("total", 0)} total alerts \u2014 '
+                f'<font color="{ACCENT_RED.hexval()}">{sc.get("critical", 0)} critical</font>, '
+                f'<font color="{ACCENT_ORANGE.hexval()}">{sc.get("high", 0)} high</font>, '
+                f'<font color="{ACCENT_AMBER.hexval()}">{sc.get("medium", 0)} medium</font>, '
+                f'<font color="#eab308">{sc.get("low", 0)} low</font>',
+                _s('Body')
+            ))
             story.append(Spacer(1, 3*mm))
 
+        alert_rows = []
         for alert in alerts:
-            alert_rows.append([
-                alert.get('rule_name', alert.get('rule', 'Unknown')),
-                alert.get('severity', 'info').capitalize(),
-                alert.get('resource', '—'),
-                alert.get('timestamp', alert.get('time', '—')),
-            ])
+            severity = alert.get('severity', 'info').lower()
+            sev_display = severity.capitalize()
+            rule = alert.get('rule_name', alert.get('rule', 'Unknown'))
+            resource = alert.get('resource', '\u2014')
+            ts = alert.get('timestamp', alert.get('time', '\u2014'))
+            ns = alert.get('namespace', '')
+            resource_display = f'{resource}' + (f' ({ns})' if ns else '')
+            alert_rows.append([rule, sev_display, resource_display, ts])
 
         if alert_rows:
             alert_table = make_table(
                 ['Rule', 'Severity', 'Resource', 'Timestamp'],
                 alert_rows,
-                col_widths=[50*mm, 18*mm, 40*mm, 42*mm],
+                col_widths=[50*mm, 16*mm, 50*mm, 34*mm],
             )
             story.append(alert_table)
 
-    # REMEDIATION ACTIONS
+    # ── 7. REMEDIATION ACTIONS ──────────────────────────────────
     if remediations:
         story.append(PageBreak())
-        story.append(Paragraph('6. Remediation Actions', _s('SectionTitle')))
+        story.append(Paragraph('7. Remediation Actions', _s('SectionTitle')))
         story.append(SectionDivider())
         story.append(Paragraph(
             'The AI-powered remediation agent (Claude Sonnet 4) was triggered for high and critical '
@@ -493,8 +696,8 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
 
         for j, session in enumerate(remediations, 1):
             incident = session.get('incident', {})
-            story.append(Paragraph(f'6.{j} Remediation Session — {incident.get("attack_name", incident.get("name", session.get("session_id", f"Session {j}")))}', _s('SubSectionTitle')))
-            story.append(Paragraph(f'<b>Session ID:</b> {session.get("session_id", "—")}', _s('Body')))
+            story.append(Paragraph(f'7.{j} Remediation Session \u2014 {incident.get("attack_name", incident.get("name", session.get("session_id", f"Session {j}")))}', _s('SubSectionTitle')))
+            story.append(Paragraph(f'<b>Session ID:</b> {session.get("session_id", "\u2014")}', _s('Body')))
             story.append(Paragraph(f'<b>Status:</b> {session.get("status", "Unknown").capitalize()}', _s('Body')))
             story.append(Paragraph(f'<b>Triggered By:</b> {incident.get("severity", "Unknown").capitalize()} severity incident', _s('Body')))
             story.append(Spacer(1, 2*mm))
@@ -508,15 +711,15 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
                     command = step.get('command', '')
                     output = step.get('command_output', '')
                     if thinking:
-                        story.append(Paragraph(f'<i>Step {k} — Reasoning:</i>', _s('SmallText')))
-                        story.append(Paragraph(thinking[:500] + ('…' if len(thinking) > 500 else ''), _s('ThinkingText')))
+                        story.append(Paragraph(f'Step {k} \u2014 Reasoning:', _s('SmallText')))
+                        story.append(Paragraph(thinking[:500] + ('\u2026' if len(thinking) > 500 else ''), _s('ThinkingText')))
                     if command:
-                        story.append(Paragraph(f'<i>Command:</i>', _s('SmallText')))
-                        story.append(Paragraph(f'<font face="Courier" size="7.5">{command}</font>', _s('CommandText')))
+                        story.append(Paragraph(f'Command:', _s('SmallText')))
+                        story.append(Paragraph(html.escape(command), _s('CommandText')))
                     if output:
-                        story.append(Paragraph(f'<i>Output:</i>', _s('SmallText')))
-                        truncated = output[:300] + ('…' if len(output) > 300 else '')
-                        story.append(Paragraph(f'<font face="Courier" size="7">{truncated}</font>', _s('CommandOutput')))
+                        story.append(Paragraph(f'Output:', _s('SmallText')))
+                        truncated = output[:300] + ('\u2026' if len(output) > 300 else '')
+                        story.append(Paragraph(html.escape(truncated), _s('CommandOutput')))
                 story.append(Spacer(1, 2*mm))
 
             summary = session.get('summary')
@@ -524,16 +727,19 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
                 story.append(Paragraph(f'<b>Summary:</b> {summary}', _s('Body')))
             story.append(HRFlowable(width='100%', thickness=0.3, color=BORDER_COLOR, spaceAfter=3*mm, spaceBefore=3*mm))
 
-    # CONCLUSION
+    # ── 8. CONCLUSION & RECOMMENDATIONS ─────────────────────────
     story.append(PageBreak())
-    story.append(Paragraph('7. Conclusion', _s('SectionTitle')))
+    story.append(Paragraph('8. Conclusion', _s('SectionTitle')))
     story.append(SectionDivider())
 
     conclusion_text = data.get('conclusion', {}).get('text', '') or (
-        f'This security assessment successfully demonstrated {len(attacks)} real-world Kubernetes attack '
-        f'techniques across {len(mitre_tactics)} MITRE ATT&CK tactics. The assessment identified '
-        f'{critical_count} critical and {high_count} high-severity vulnerabilities in the cluster configuration '
-        f'that could be exploited by adversaries to compromise containerized workloads.'
+        f'This security assessment successfully executed {len(attacks)} real-world Kubernetes attack '
+        f'techniques across {len(mitre_tactics)} MITRE ATT&CK tactics, demonstrating {covered_techniques} '
+        f'out of {total_techniques} techniques ({int(covered_techniques/total_techniques*100) if total_techniques else 0}% coverage). '
+        f'The assessment identified {critical_count} critical and {high_count} high-severity vulnerabilities '
+        f'in the cluster configuration that could be exploited by adversaries to compromise containerized '
+        f'workloads, escalate privileges, exfiltrate sensitive data, and disrupt cluster operations.'
+        f'{" AI-powered remediation was triggered for " + str(len(remediations)) + " incidents, successfully mitigating identified threats through automated command execution." if remediations else ""}'
     )
     story.append(Paragraph(conclusion_text, _s('ConclusionText')))
     story.append(Spacer(1, 4*mm))
@@ -541,13 +747,14 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
     recs = data.get('conclusion', {}).get('recommendations', [])
     if not recs:
         recs = [
-            'Enforce Pod Security Standards (restricted profile) to prevent privileged container deployment.',
-            'Implement RBAC least-privilege policies — avoid cluster-admin bindings for service accounts.',
-            'Disable hostPath volume mounts unless absolutely necessary; use CSI drivers with appropriate policies.',
-            'Store secrets in external secrets management (HashiCorp Vault, AWS Secrets Manager) with automatic rotation.',
-            'Enable audit logging and implement real-time threat detection for rapid incident response.',
-            'Conduct regular security assessments to identify and remediate configuration drift.',
-            'Implement network policies to enforce micro-segmentation and restrict east-west traffic.',
+            'Enforce Pod Security Standards (restricted profile) to prevent privileged container deployment and reduce the attack surface for container escape techniques.',
+            'Implement RBAC least-privilege policies \u2014 avoid cluster-admin bindings for service accounts and use RoleBindings with scoped permissions instead of ClusterRoleBindings.',
+            'Disable hostPath volume mounts unless absolutely necessary; use CSI drivers with appropriate policies and admission controllers to enforce restrictions.',
+            'Store secrets in external secrets management solutions (HashiCorp Vault, AWS Secrets Manager, Azure Key Vault) with automatic rotation and audit logging, rather than Kubernetes-native Secrets.',
+            'Enable Kubernetes audit logging to all control plane components and implement real-time threat detection using tools like Falco or Kubernetes monitoring solutions.',
+            'Implement network policies to enforce micro-segmentation and restrict east-west traffic between pods, limiting lateral movement capabilities.',
+            'Apply SecurityContext constraints at the pod level \u2014 drop all capabilities, run as non-root, use read-only root filesystems, and set seccomp profiles.',
+            'Conduct regular security assessments and penetration testing to identify and remediate configuration drift and newly discovered vulnerabilities.',
         ]
     story.append(Paragraph('Recommendations', _s('SubSectionTitle')))
     story.append(Spacer(1, 1*mm))
@@ -557,9 +764,9 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
 
     story.append(HRFlowable(width='100%', thickness=0.5, color=ACCENT_RED, spaceAfter=4*mm, spaceBefore=2*mm))
     story.append(Paragraph(
-        '<i>This report was generated automatically by the K8s Attack & Remediation Platform. '
+        'This report was generated automatically by the K8s Attack & Remediation Platform. '
         'The findings reflect the state of the cluster at the time of assessment and should be '
-        'used as part of a broader security review process.</i>',
+        'used as part of a broader security review process.',
         _s('SmallText')
     ))
 
