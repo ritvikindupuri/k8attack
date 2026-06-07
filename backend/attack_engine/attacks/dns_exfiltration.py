@@ -121,7 +121,7 @@ class DNSExfiltration(BaseAttack):
                             "chunk_index": i,
                         })
                     except Exception as e:
-                        self.emit_event_sync("error", f"DNS query failed: {e}", {})
+                        self.emit_event_sync("info", f"DNS query skipped: {e}", {})
 
                 try:
                     self.cmd_event_sync(

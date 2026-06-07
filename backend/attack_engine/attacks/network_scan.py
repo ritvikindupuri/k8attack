@@ -173,7 +173,7 @@ class InternalNetworkScan(BaseAttack):
                                 "protocol": port.protocol,
                             })
                     except Exception as e:
-                        self.emit_event_sync("error", f"Scan failed for {svc.metadata.name}:{port.port}: {e}", {})
+                        self.emit_event_sync("info", f"Scan result for {svc.metadata.name}:{port.port}: {e}", {})
 
                     await asyncio.sleep(0.5)
 

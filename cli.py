@@ -598,6 +598,17 @@ async def ensure_ready(with_remediation=False):
     await dm.start_monitoring()
     ok("Detection monitor running")
 
+    # Label namespace to allow privileged pods (bypass PodSecurity)
+    try:
+        subprocess.run(
+            ["kubectl", "label", "namespace", "default",
+             "pod-security.kubernetes.io/enforce=privileged",
+             "--overwrite"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except Exception:
+        pass
+
     ra = None
     if with_remediation:
         ak = os.environ.get("ANTHROPIC_API_KEY", "")

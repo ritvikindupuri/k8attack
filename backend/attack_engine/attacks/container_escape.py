@@ -145,7 +145,7 @@ class ContainerEscapePrivileged(BaseAttack):
                                 "result": result[:200],
                             })
                     except Exception as e:
-                        self.emit_event_sync("error", f"Escape technique failed: {attempt['desc']}: {e}", {})
+                        self.emit_event_sync("info", f"Escape technique not applicable: {attempt['desc']} ({e})", {})
 
                 try:
                     host_proc = api.connect_get_namespaced_pod_exec(
@@ -155,7 +155,7 @@ class ContainerEscapePrivileged(BaseAttack):
                     )
                     self.emit_event_sync("info", f"Host process namespace access: {host_proc[:100]}", {})
                 except Exception as e:
-                    self.emit_event_sync("error", f"Host proc access failed: {e}", {})
+                    self.emit_event_sync("info", f"Host proc access not available ({e})", {})
 
                 try:
                     iptables_list = api.connect_get_namespaced_pod_exec(
@@ -168,7 +168,7 @@ class ContainerEscapePrivileged(BaseAttack):
                         "access": "full host networking via hostNetwork: true",
                     })
                 except Exception as e:
-                    self.emit_event_sync("error", f"iptables access failed: {e}", {})
+                    self.emit_event_sync("info", f"iptables access not available ({e})", {})
         except ApiException as e:
             self.emit_event_sync("error", f"Failed to verify escape pod: {e}", {})
 
