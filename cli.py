@@ -590,7 +590,7 @@ async def ensure_ready(with_remediation=False):
         r = await cm.create_cluster()
         if not r.get("success"):
             fail(f"Cluster creation: {r.get('error', '')}")
-            return None, None, None, None
+        return None, None, None, None, None
         ok("Cluster created")
 
     print()
