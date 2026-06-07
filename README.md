@@ -14,10 +14,11 @@ A pure CLI tool that deploys a real Kind cluster, executes 10 real-world Kuberne
 git clone https://github.com/ritvikindupuri/k8attack.git
 cd k8attack
 pip install -r backend/requirements.txt
+cp .env.example .env   # Optional: set ANTHROPIC_API_KEY for remediation
 python3 cli.py
 ```
 
-Select option **11** (Run All Attacks) to see the full workflow.
+Select option **11** (Run All Attacks) to see the full workflow — no API key needed.
 
 ---
 
@@ -69,7 +70,7 @@ For complete technical details including attack module internals, detection rule
 |--------|------|-------------|
 | 1–10 | Single Attack | Run one specific attack module |
 | 11 | Run All Attacks | Execute all 10 attacks sequentially |
-| 12 | Full Engagement | All attacks + auto-remediation (requires `ANTHROPIC_API_KEY`) |
+| 12 | Full Engagement | All attacks + auto-remediation (only option that requires `ANTHROPIC_API_KEY`) |
 | 13 | View Results | Display latest engagement results with MITRE grid |
 | 14 | Cluster Status | Live cluster info (nodes, pods, namespaces) |
 
@@ -99,7 +100,7 @@ For complete technical details including attack module internals, detection rule
 - Docker (Desktop or Engine)
 - Kind + kubectl
 - Python 3.11+
-- Anthropic API key (for remediation — optional)
+- Anthropic API key (only for Full Engagement — optional; options 1–11, 13–14 work without it)
 
 ### macOS
 
@@ -112,9 +113,10 @@ brew install --cask docker
 git clone https://github.com/ritvikindupuri/k8attack.git
 cd k8attack
 pip3 install -r backend/requirements.txt
+cp .env.example .env
 
-# Set API key (optional, for auto-remediation)
-export ANTHROPIC_API_KEY="sk-ant-..."
+# Edit .env with your API key (only needed for option 12)
+# Options 1–11, 13–14 work without it
 ```
 
 ### Linux
@@ -136,9 +138,9 @@ chmod +x kubectl && sudo mv kubectl /usr/local/bin/
 git clone https://github.com/ritvikindupuri/k8attack.git
 cd k8attack
 pip3 install -r backend/requirements.txt
+cp .env.example .env
 
-# Set API key (optional)
-export ANTHROPIC_API_KEY="sk-ant-..."
+# Edit .env with your API key (only needed for option 12)
 ```
 
 ### Windows (PowerShell)
@@ -148,7 +150,8 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 git clone https://github.com/ritvikindupuri/k8attack.git
 cd k8attack
 pip install -r backend/requirements.txt
-$env:ANTHROPIC_API_KEY = "sk-ant-..."
+cp .env.example .env
+# Edit .env with your API key (only needed for option 12)
 ```
 
 ---
@@ -181,7 +184,7 @@ Select option **11** in the menu. All 10 attacks run sequentially with live stre
 
 ### Full engagement with remediation
 
-Set `ANTHROPIC_API_KEY` and select option **12**. After each high/critical attack, Claude autonomously remediates the incident.
+Set `ANTHROPIC_API_KEY` in `.env` (see `.env.example`) and select option **12** (the only option that requires it). After each high/critical attack, Claude autonomously remediates the incident. Options 1–11 and 13–14 work without any API key.
 
 ### View results
 
@@ -199,7 +202,7 @@ Select option **14** to see nodes, pods, services, and resource capacity.
 
 ## Remediation
 
-When `ANTHROPIC_API_KEY` is set, the Full Engagement mode triggers Claude Sonnet 4 after each high/critical severity attack. The remediation agent:
+When `ANTHROPIC_API_KEY` is set (via `.env` or environment), the Full Engagement mode triggers Claude Sonnet 4 after each high/critical severity attack. The remediation agent:
 
 1. **Analyzes** the incident with structured chain-of-thought (situation, risk, strategy)
 2. **Generates** kubectl commands to remove malicious resources and harden configurations

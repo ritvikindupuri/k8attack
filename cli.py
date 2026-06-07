@@ -23,6 +23,16 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
 
+# ── Load .env file ──────────────────────────────────────────
+env_path = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.isfile(env_path):
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, _, v = line.partition("=")
+                os.environ.setdefault(k.strip(), v.strip())
+
 from cluster_manager.manager import ClusterManager, CLUSTER_NAME
 from attack_engine.mitre import MITRE_ATTACK
 from attack_engine.attacks.privilege_escalation import PrivilegeEscalationHostPath, RBACPrivilegeEscalation
