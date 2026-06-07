@@ -315,9 +315,9 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
     # ── COVER PAGE ──────────────────────────────────────────────
     story.append(Spacer(1, 55*mm))
     story.append(Paragraph('K8s Attack & Remediation Platform', _s('CoverTitle')))
+    story.append(Spacer(1, 3*mm))
     story.append(Paragraph('Security Assessment Report', _s('CoverSubtitle')))
-    story.append(SectionDivider(ACCENT_RED, 55*mm))
-    story.append(Spacer(1, 6*mm))
+    story.append(Spacer(1, 10*mm))
     story.append(Paragraph(f'Generated: {generated_at}', _s('CoverMeta')))
     story.append(PageBreak())
 
