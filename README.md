@@ -5,20 +5,6 @@ A pure CLI tool that deploys a real Kind cluster, executes 10 real-world Kuberne
 
 ---
 
-## Quick Start
-
-```bash
-git clone https://github.com/ritvikindupuri/k8attack.git
-cd k8attack
-pip install -r backend/requirements.txt
-cp .env.example .env   # Optional: set ANTHROPIC_API_KEY for remediation
-python3 cli.py
-```
-
-Select option **11** (Run All Attacks) to see the full workflow — no API key needed.
-
----
-
 ## Features
 
 - **Real Kubernetes Cluster** — Creates a 3-node Kind cluster with intentionally vulnerable configurations
@@ -99,12 +85,17 @@ For complete technical details including attack module internals, detection rule
 - Python 3.11+
 - Anthropic API key (only for Full Engagement — optional; options 1–11, 13–14 work without it)
 
-### Quickstart (macOS & Linux)
+### Quick Start
 
 ```bash
-bash scripts/setup.sh      # installs kind, kubectl, pip deps, sets up .env
-python3 cli.py              # launch the CLI
+git clone https://github.com/ritvikindupuri/k8attack.git
+cd k8attack
+pip install -r backend/requirements.txt
+cp .env.example .env   # Optional: set ANTHROPIC_API_KEY for remediation
+python3 cli.py
 ```
+
+Select option **11** (Run All Attacks) to see the full workflow — no API key needed.
 
 ### macOS
 
