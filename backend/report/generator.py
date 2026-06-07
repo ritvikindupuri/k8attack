@@ -313,43 +313,12 @@ def generate_report(data: Dict[str, Any]) -> io.BytesIO:
     covered_techniques = sum(t.get('covered_count', len(t.get('techniques', []))) for t in mitre_tactics)
 
     # ── COVER PAGE ──────────────────────────────────────────────
-    story.append(Spacer(1, 50*mm))
+    story.append(Spacer(1, 55*mm))
     story.append(Paragraph('K8s Attack & Remediation Platform', _s('CoverTitle')))
     story.append(Paragraph('Security Assessment Report', _s('CoverSubtitle')))
     story.append(SectionDivider(ACCENT_RED, 55*mm))
-    story.append(Spacer(1, 4*mm))
+    story.append(Spacer(1, 6*mm))
     story.append(Paragraph(f'Generated: {generated_at}', _s('CoverMeta')))
-
-    cluster_name = data.get('cluster', {}).get('name', 'k8s-attack-lab')
-    story.append(Paragraph(f'Cluster: {cluster_name} ({len(cluster_nodes)} nodes)', _s('CoverMeta')))
-    story.append(Paragraph(f'Assessment Type: Automated Attack Simulation & Detection', _s('CoverMeta')))
-    story.append(Spacer(1, 15*mm))
-
-    cover_stats = [
-        ['Total Attacks Executed', str(len(attacks))],
-        ['Completed Successfully', str(completed)],
-        ['Failed', str(failed)],
-        ['Critical Severity', str(critical_count)],
-        ['High Severity', str(high_count)],
-        ['Medium Severity', str(medium_count)],
-        ['Low Severity', str(low_count)],
-        ['Detection Alerts Triggered', str(len(alerts))],
-        ['Remediation Actions Taken', str(len(remediations))],
-        ['MITRE ATT&CK Tactics Covered', str(len(mitre_tactics))],
-        ['MITRE Techniques Covered', f'{covered_techniques}/{total_techniques}'],
-    ]
-    stat_table = Table(
-        [[Paragraph(r[0], _s('CoverMeta')), Paragraph(r[1], _s('CoverMeta'))] for r in cover_stats],
-        colWidths=[50*mm, 25*mm],
-    )
-    stat_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-    ]))
-    story.append(stat_table)
     story.append(PageBreak())
 
     # ── 1. EXECUTIVE SUMMARY ────────────────────────────────────
