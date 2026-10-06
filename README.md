@@ -21,25 +21,29 @@ A pure CLI tool that deploys a real Kind cluster, executes 10 real-world Kuberne
 ## System Architecture
 
 <div align="center">
-  <img src="karma-architecture.svg" alt="KARMA System Architecture" width="100%"/>
-  <p><em>Figure 1: KARMA System Architecture — component layers and data flow</em></p>
+  <img src="karma-architecture.png" alt="KARMA System Architecture" width="100%"/>
+  <p><em>Figure 1: KARMA System Architecture — 8-component layers and real-time execution flow</em></p>
 </div>
 
 ### Data Flow
 
-1. **CLI → Attack Engine** — The user selects an attack from the interactive menu. The CLI imports backend components directly in-process (no HTTP needed for local operation) and streams live agent output to the terminal.
+The system executes through an automated, event-driven loop across 8 core architectural components:
 
-2. **API → Attack Engine** — The API routes the request to the Attack Engine, which instantiates the selected attack module and executes it against the Kind cluster via the Kubernetes Python client.
+1. **Interactive CLI (`cli.py`)** — The operator selects an attack technique, batch engagement, or cluster inspection from menu options 1–14. The CLI imports backend modules directly in-process (or dispatches via REST) and hooks terminal streaming (`LiveWS`) to render real-time execution telemetry.
 
-3. **Attack Engine → Cluster** — The attack module creates, modifies, or deletes Kubernetes resources (pods, ClusterRoleBindings, service accounts) in the Kind cluster. Every command and its output is captured and broadcast over WebSocket.
+2. **FastAPI Backend (`backend/main.py`)** — The application server orchestrates campaigns across 28 REST endpoints and broadcasts live attack/remediation event streams over `/ws` WebSockets to connected dashboards and terminals.
 
-4. **Cluster → Detection Monitor** — The Detection Monitor watches the cluster in real-time using Kubernetes watch APIs. When a new resource matches an alert rule (privileged pod, hostPath mount, cluster-admin binding, etc.), it creates a detection event and broadcasts the alert.
+3. **Attack Engine (`backend/attack_engine/`)** — Instantiates and executes selected attack vectors from the 10 MITRE ATT&CK modules (spanning Privilege Escalation, Collection, Discovery, Credential Access, and Impact) against cluster APIs using the Kubernetes Python client.
 
-5. **Detection → Remediation Agent** — For attacks with high or critical severity, the API queues the incident to the Remediation Agent. Claude Sonnet 4 receives the incident details plus recent detection events.
+4. **Kubernetes Kind Cluster (`k8s-attack-lab`)** — A real 3-node cluster (1 Control Plane + 2 Workers) running inside Docker containers with intentionally provisioned misconfigurations, vulnerable RBAC, exposed endpoints, and test secrets.
 
-6. **Remediation Agent → Cluster** — The agent produces structured thinking blocks and kubectl commands. Each command is executed against the cluster, with output streamed back. The agent continues until a summary concludes the session.
+5. **Detection Monitor (`backend/detection/monitor.py`)** — Continuously observes cluster mutations via real-time Kubernetes Watch APIs, evaluating pod creation, hostPath volumes, and privileged flags against 7 detection rules. It queues High/Critical severity security incidents.
 
-7. **Results → CLI + Report** — All attack and remediation data is stored in memory, returned to the CLI for display, and available for PDF report generation via `/api/report`.
+6. **Claude AI Intelligence (`claude-sonnet-4-20250514`)** — Ingests queued incident telemetry and context, reasoning transparently through `<thinking>` chain-of-thought blocks to synthesize precise, surgical Kubernetes hardening commands.
+
+7. **Autonomous Remediation Agent (`backend/remediation/agent.py`)** — Validates and executes Claude's structured remediation fixes via subprocess `kubectl` commands against the live Kind cluster, actively hardening workloads and patching RBAC holes.
+
+8. **Results & Security Report (`backend/report/generator.py` / `results/`)** — Aggregates MITRE technique coverage, detection alerts, agent reasoning, and audit telemetry into JSON logs and compiles an executive assessment PDF (`report.pdf`) using ReportLab.
 
 ### Technical Documentation
 
